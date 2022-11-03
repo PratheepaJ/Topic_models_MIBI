@@ -1,0 +1,235 @@
+---
+title: "TNBC_Phenotype_Distribution"
+output:
+  pdf_document: default
+  html_document: default
+date: "2022-10-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(dplyr.summarise.inform = FALSE)
+```
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(hrbrthemes)
+library(RColorBrewer)
+```
+
+
+## CSV
+
+Read in the TNBC revised csv file.
+
+```{r}
+TNBC <- readr::read_csv("/Users/henzhwang/Desktop/TNBC_training/MIBI-TNBC_scdata_counts_mm_matlab_revised.csv")
+```
+
+## Some statistics of the dataset
+
+```{r}
+# Column names in the dataset
+names(TNBC)
+
+print("------------------------------------------------------------------------")
+
+# Chekc if patient_id and sample_id have the same number
+count_patient <- n_distinct(TNBC$patient_id)
+count_sample <- n_distinct(TNBC$sample_id)
+dplyr::setequal(count_sample, count_patient)
+print(paste("There are equal number of", count_patient, "patients and samples in the dataset."))
+
+print("------------------------------------------------------------------------")
+
+# Checking whether there are duplicates in cellLabelInImage column
+dplyr::select(TNBC, cellLabelInImage) %>% 
+  duplicated() %>% sum()
+
+print("------------------------------------------------------------------------")
+
+# Number of unique cell types and their names
+## There are total of 16 different cells in the dataset
+type_counts <- TNBC %>% 
+  group_by(mm) %>% 
+  #summarise(count = n_distinct(cellLabelInImage))
+  summarise(n = n(), NumOfSamples = n_distinct(sample_id))
+type_counts
+```
+
+
+
+## Extract needed columns
+
+Extract columns that are useful for our analysis.
+
+```{r}
+TNBC <- TNBC %>% 
+  dplyr::select(c(sample_id, patient_id, Survival_days_capped, 
+                  cluster_id, mm, cell_type, ImageNb, cellLabelInImage,
+                  cellSize, cellRadius, centroidX, centroidY))
+head(TNBC)
+```
+
+
+## Range of the spatial corrdinate x and y
+
+First we want to find the range of the spatial corrdinate $x$ and $y$ in the whole dataset.
+
+```{r}
+centroidX <- TNBC$centroidX
+centroidY <- TNBC$centroidY
+
+# Range for the whole dataset
+range_wholeX <- c(min(centroidX), max(centroidX), median(centroidX), sd(centroidX))
+range_wholeY <- c(min(centroidY), max(centroidY), median(centroidY), sd(centroidY))
+
+print(paste("The range of centroid X in the whole dataset is (", range_wholeX[1], ",", range_wholeX[2], "), the median is", range_wholeX[3], "and standard deviation is", round(range_wholeX[4], 3), "."))
+print(paste("The range of centroid X in the whole dataset is (", range_wholeY[1], ",", range_wholeY[2], "), the median is", range_wholeY[3], "and standard deviation is", round(range_wholeY[4], 3), "."))
+```
+
+
+Now we want to find the range of the spatial corrdinate for each cell types in the dataset.
+
+```{r}
+# Find the range of each cell types in the dataset
+## centroidX
+cells_corrdX <- TNBC %>% 
+  group_by(mm) %>% 
+  summarise(n = n(), min = min(centroidX), max = max(centroidX), median = median(centroidX), sd = sd(centroidX))
+cells_corrdX
+
+## centroidY
+cells_corrdY <- TNBC %>% 
+  group_by(mm) %>% 
+  summarise(n = n(), min = min(centroidY), max = max(centroidY), median = median(centroidY), sd = sd(centroidY))
+cells_corrdY
+```
+
+
+Next we want to find the range of spatial coordinate for each cell types in each sample.
+
+```{r}
+# Find range of corrdinate for each cell types in each sample
+## centroidX
+cells_corrdX_perSample <- TNBC %>%
+  group_by(sample_id, mm) %>% 
+  summarise(n = n(), min = min(centroidX), max = max(centroidX), median = median(centroidX), sd = sd(centroidX))
+cells_corrdX_perSample
+
+## centroidY
+cells_corrdY_perSample <- TNBC %>%
+  group_by(sample_id, mm) %>% 
+  summarise(n = n(), min = min(centroidY), max = max(centroidY), median = median(centroidY), sd = sd(centroidY))
+cells_corrdY_perSample
+```
+
+
+
+
+## Phenotype distribution for each sample
+
+Want to make a heatmap of the phenotype distribution where sample number vs. cell types. We first want to plot a distribution plot of the number of cells in the dataset.
+
+```{r}
+# hist 1
+cell_counts <- cells_corrdX_perSample
+
+ggplot(cell_counts, aes(x = n)) +
+  geom_histogram(binwidth = 20)
+
+## We notice that majority of the distribution is less than 1000 count, we then want to draw a new histogram for x up to 1000
+
+# hist 2
+cell_counts$n[cell_counts$n >= 1000] <- NA
+
+ggplot(cell_counts, aes(x = n)) +
+  geom_histogram(binwidth = 10)
+
+## We notice that again the majority of the distribution is less than 200, we want to take a closer look to the distribution
+
+# hist 3
+cell_counts$n[cell_counts$n >= 200] <- NA
+
+ggplot(cell_counts, aes(x = n)) +
+  geom_histogram(binwidth = 5)
+```
+(Why the sample_id is outlier for B cell?)
+(How well the sequencing for the sample_id?)
+
+```{r}
+# Heatmap
+#sample_number <- paste("Sample", sort(unique(TNBC$sample_id)))
+#sample_number <- c("Sample 1", "Sample 2", "Sample 3", "Sample 4")
+
+TNBC$sample_id[TNBC$sample_id < 10] <- paste0("0", TNBC$sample_id[TNBC$sample_id < 10])
+
+TNBC %>%
+  group_by(sample_id, mm) %>%
+  mutate(n = n()) %>%
+  mutate(sample_id = paste("Sample", sample_id)) %>% 
+  mutate(sample_id = factor(sample_id, levels = rev(sort(unique(sample_id))))) %>% 
+  select(c(sample_id, mm, n)) %>%
+  #as.data.frame() %>% 
+  
+  mutate(mm = factor(mm, levels = rev(sort(unique(mm))))) %>%
+  mutate(count = cut(n, breaks = c(-1, 1.1, 5.1, 10.1, 
+                                   25.1, 50.1, 100.1, 250.1, 500.1, 1000.1, 2000.1, max(n, na.rm = TRUE)+1),
+                     labels = c("0-1", "1-5", "5-10", "10-25", "25-50",
+                                "50-100", "100-250", "250-500", "500-1000", "1000-2000", ">2000"))) %>%
+  mutate(count = factor(as.character(count), levels = rev(levels(count)))) %>%
+  
+  ggplot(mapping = aes(x = mm, y = sample_id, fill = count)) +
+    geom_tile(colour = "white", size = 0.3) +
+    guides(fill=guide_legend(title = "Number of Cells \nin Each Sample"))+
+    labs(x="", y="", title = "Phenotype Distribution of Triple Negative Breast Cancer")+
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_x_discrete(expand = c(0, 0)) +
+    
+    #scale_fill_manual(values = rev(brewer.pal(11, "RdGy")), na.value = "azure4") + #RdGy RdBu
+    scale_fill_manual(values = brewer.pal(11, "RdBu"), na.value = "azure4") + 
+    #scale_fill_manual(values=c("#d53e4f", "#f46d43", "#fdae61", "#fee08b", 
+    #                           "#e6f598", "#abdda4", "#ddf1da"), na.value = "grey90") +
+  
+    #theme_grey(base_size=6)+
+  # #theme options
+  #   theme(
+  #   #bold font for legend text
+  #   legend.text=element_text(face="bold"),
+  #   #set thickness of axis ticks
+  #   axis.ticks=element_line(size=0.4),
+  #   #remove plot background
+  #   plot.background=element_blank(),
+  #   #remove plot border
+  #   panel.border=element_blank()
+  #   )
+    theme_grey(base_size = 10)+
+    theme(legend.position = "right", legend.direction = "vertical",
+        legend.title = element_text(colour = "black"),
+        legend.margin = margin(grid::unit(0, "cm")),
+        legend.text = element_text(colour = "grey40", size = 7, face = "bold"),
+        legend.key.height = grid::unit(0.8, "cm"),
+        legend.key.width = grid::unit(0.2, "cm"),
+        axis.text.x = element_text(size = 7, colour = "grey40"),
+        axis.text.y = element_text(vjust = 0.2, colour = "grey40"),
+        axis.ticks = element_line(size = 0.4),
+        plot.background = element_blank(),
+        panel.border = element_blank(),
+        plot.margin = margin(0.7, 0.4, 0.1, 0.2, "cm"),
+        plot.title = element_text(colour = "grey40", hjust = 0, size = 14, face = "bold")
+     )
+```
+
+
+Reference: [https://www.royfrancis.com/a-guide-to-elegant-tiled-heatmaps-in-r-2019/](https://www.royfrancis.com/a-guide-to-elegant-tiled-heatmaps-in-r-2019/)
+
+
+
+
+
+Next:
+
+To explore whether we can colour the cell in the tiff file based on cell type. Chap 11 Moedern Stats Modern Bio
