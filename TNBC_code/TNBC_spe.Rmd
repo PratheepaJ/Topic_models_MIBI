@@ -95,10 +95,10 @@ TNBC %>%
 
 The goal is create a count matrix with row names are `sample_id` and column names are `cluster_id` where the input values are the count of cells for cluster_id in one sample.
 
-First we want to take sample 1 and try to contruct the count matrix.
+First we want to take sample 1 and try to construct the count matrix.
 ```{r}
 # filter out sample 1 from the TNBC dataset
-TNBC_sample1 <- TNBC %>% filter(sample_id == 1)
+TNBC_sample1 <- TNBC %>% dplyr::filter(sample_id == 1)
 head(TNBC_sample1)
 
 # # select the required columns
@@ -118,7 +118,7 @@ count_sample1 <- TNBC_sample1 %>%
 We then want to take sample 2 and construct the count matrix
 ```{r}
 # filter out sample 1 from the TNBC dataset
-TNBC_sample2 <- TNBC %>% filter(sample_id == 2)
+TNBC_sample2 <- TNBC %>% dplyr::filter(sample_id == 2)
 head(TNBC_sample2)
 
 # construct count matrix
@@ -170,7 +170,7 @@ create_countMat <- function(dataset) {
     sampleId <- paste0("sample_", k)
     
     sample_df <- dataset %>%
-      filter(sample_id == k) %>% 
+      dplyr::filter(sample_id == k) %>% 
       group_by(cluster_id) %>% 
       summarise(!!(sampleId) := n())
       #summarise(!!as.character(k) := n())
@@ -210,7 +210,7 @@ create_countMat <- function(dataset) {
 **Test Case:** We subset the `TNBC` dataset with `sample_id` less than or equal to 2 (where is the same dataset used to create the `example`), create its count matrix and compare with `example` data frame.
 
 ```{r}
-TNBC_12 <- TNBC %>% filter(sample_id <= 2)
+TNBC_12 <- TNBC %>% dplyr::filter(sample_id <= 2)
 test <- create_countMat(TNBC_12)
 
 head(test)
@@ -229,3 +229,16 @@ head(test_all)
 ```
 
 By the above results, we have create a `test_all` count matrix with dimension of $39$ rows(samples) and $113$ columns(cluster_id) with $179194$ cells.
+
+
+### Simple method
+
+We can construct the count matrix with using one line of code.
+```{r}
+test_simple <- as.data.frame.matrix(with(TNBC, table(sample_id, cluster_id)))
+all.equal(test_simple, test_all) # error is because the row names are different
+
+rownames(test_simple) <- paste0("sample_", rownames(test_simple))
+all.equal(test_simple, test_all)
+```
+
