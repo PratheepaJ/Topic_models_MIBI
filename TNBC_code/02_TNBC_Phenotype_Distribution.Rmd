@@ -1,9 +1,9 @@
 ---
 title: "02_TNBC_Phenotype_Distribution"
 output:
+  html_document: default
   pdf_document: 
     toc: yes
-  html_document: default
 date: "2022-11-18"
 ---
 
@@ -28,6 +28,7 @@ This document aims to analyze the phenotype distribution with `sample_id` and `c
 library(readr)
 library(dplyr)
 library(ggplot2)
+library(formattable)
 library(RColorBrewer)
 ```
 
