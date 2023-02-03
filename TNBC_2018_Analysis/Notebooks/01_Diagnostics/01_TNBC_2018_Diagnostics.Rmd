@@ -1,0 +1,325 @@
+---
+title: "01_TNBC_2018_Diagnostics"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2022-11-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+
+## Overview
+
+The document will perform the following diagnostics:
+
+  1. Check the unique number and values of the metadata, and constuct a tibble of metadata for each patient
+  2. Checking the basic properties such as dimensions and column names of the dataset
+  3. Check if `sample_id` and `patient_id` have the same length, and check if `sample_id` and `ImageNb` have the same values
+  4. Check if one value in one column is unique to one value in the other two columns
+  5. Check if `cell_type` and `mm` have the same length, and if true then check if one `cell_type` is unique to one `mm` value
+  6. Check the names of the `mm` cell type and construct a tibble for the count of different cell types present in each sample
+  7. Find number of unique cluster number and investigate number of different clusters in each sample with graphs
+  8. Investigate the range, median and standard deviation of the all spatial coordinates, for each cell type and for each cell type in each sample
+  
+
+
+## Libraries
+```{r warning=FALSE, message=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(formattable)
+```
+
+
+## Read CSV
+
+Read in the MATLAB revised TNBC output CSV files.
+```{r}
+#TNBC <- readr::read_csv("Data/MIBI-TNBC_count_output.csv")
+TNBC <- readr::read_csv(here::here("Data", "MIBI-TNBC_count_output.csv"))
+```
+
+
+## Dataset Diagnostics
+
+The aim of this rmarkdown file is to perform disgnostics on the `TNBC` dataset.
+
+### Basic Properties
+
+There are $179194$ rows and $64$ columns in the `TNBC` dataset, $44$ of the columns are proteins markers and $8$ coulmns are the patients metadata.
+
+```{r}
+# dimensions
+dim(TNBC)
+
+# names of the columns
+names(TNBC)
+```
+
+Summary of count of cells in each sample. 
+Sample 33 has the minimum of 1716 cells, sample 30 has the maximum of 9886 cells. 
+```{r}
+TNBC_count <- TNBC %>% dplyr::count(sample_id)
+TNBC_count
+hist(TNBC_count$n,
+     main = "Histogram of cell counts in each sample",
+     xlab = "Unique sample_id", ylab = "Counts",
+     breaks = 25, xlim = c(1000, 10000), ylim = c(0, 8))
+summary(TNBC_count)
+```
+Summary of count of cells in each cluster. 
+cluster 10 has the least number of $783$ cells, and cluster113 has the most number of $4382$ cells.
+```{r}
+TNBC_cluster_count <- TNBC %>% dplyr::count(cluster_id)
+TNBC_cluster_count
+hist(TNBC_cluster_count$n,
+     main = "Histogram of cell counts in each cluster",
+     xlab = "Unique sample_id", ylab = "Counts",
+     breaks = 30, xlim = c(500, 4500), ylim = c(0, 20))
+summary(TNBC_cluster_count)
+```
+
+
+### Metadata
+
+There are $8$ patient metadata in the dataset, they are `patient_id`, `AGE_AT_DX`, `STAGE`, `SITE_02`, `LATERAL`, `GRADE`, `RECURRENCE_LABEL`, `Survival_days_capped`. We want to investigate on their unique number and metadata information for each patient.
+
+```{r}
+# unique number for each metadata
+data.frame(patient_id = length(unique(TNBC$patient_id)),
+           AGE_AT_DX = length(unique(TNBC$AGE_AT_DX)),
+           STAGE = length(unique(TNBC$STAGE)),
+           SITE_02 = length(unique(TNBC$SITE_02)),
+           LATERAL = length(unique(TNBC$LATERAL)),
+           GRADE = length(unique(TNBC$GRADE)),
+           RECURRENCE_LABEL = length(unique(TNBC$RECURRENCE_LABEL)),
+           Survival_days_capped = length(unique(TNBC$Survival_days_capped)))
+
+# unique values
+# patient_id
+print("patien_id")
+data.frame(patient_id = unique(TNBC$patient_id)) %>% t()
+# AGE_AT_DX
+print("AGE_AT_DX")
+data.frame(AGE_AT_DX = unique(TNBC$AGE_AT_DX)) %>% t()
+# STAGE
+print("STAGE")
+data.frame(STAGE = unique(TNBC$STAGE)) %>% t()
+# SITE_02
+print("SITE_02")
+data.frame(SITE_02 = unique(TNBC$SITE_02)) %>% t()
+# LATERAL
+print("LATERAL")
+data.frame(LATERAL = unique(TNBC$LATERAL)) %>% t()
+# GRADE
+print("GRADE")
+data.frame(GRADE = unique(TNBC$GRADE)) %>% t()
+# RECURRENCE_LABEL
+print("RECURRENCE_LABEL")
+data.frame(RECURRENCE_LABEL = unique(TNBC$RECURRENCE_LABEL)) %>% t()
+# Survival_days_capped
+print("Survival_days_capped")
+data.frame(Survival_days_capped = unique(TNBC$Survival_days_capped)) %>% t()
+```
+
+```{r}
+# metadata information for each sample_id
+# n_(1,2,3,4,5,6,7) are the unique values of the metadata in one sample
+TNBC %>% 
+  group_by(sample_id) %>% 
+  summarise(n_1 = length(unique(AGE_AT_DX)),
+            AGE_AT_DX = unique(AGE_AT_DX),
+            n_2 = length(unique(STAGE)),
+            STAGE = unique(STAGE),
+            n_3 = length(unique(SITE_02)),
+            SITE_02 = unique(SITE_02),
+            n_4 = length(unique(LATERAL)),
+            LATERAL = unique(LATERAL),
+            n_5 = length(unique(GRADE)),
+            GRADE = unique(GRADE),
+            n_6 = length(unique(RECURRENCE_LABEL)),
+            RECURRENCE_LABEL = unique(RECURRENCE_LABEL),
+            n_7 = length(unique(Survival_days_capped)),
+            Survival_days_capped = unique(Survival_days_capped))
+```
+
+
+
+### Uniquness of patient information
+
+There are total $39$ patients in the dataset with their corresponding $39$ images. The original study from Keren et al. in $2018$ have $41$ patients however the images for patient $22$ and $38$ failed the quality check and were left out in the analysis.
+
+The following code chunk will check the uniquness of `sample_id`, `patient_id` and `ImageNb`.
+
+```{r}
+# unique values
+unique_sample <- unique(TNBC$sample_id)
+unique_patient <- unique(TNBC$patient_id)
+unique_image <- unique(TNBC$ImageNb)
+
+# if sample_id and patient_id have same length
+dplyr::setequal(unique_sample, unique_patient)
+
+# if sample_id and ImageNb have same values
+all.equal(unique_sample, unique_image)
+
+# since true, if one sample_id is unique to one patient_id (also one ImageNb)
+TNBC %>% 
+  group_by(sample_id) %>% 
+  summarise(cell_count = n(), 
+            num_unique_image = length(unique(ImageNb)), ImageNb = unique(ImageNb), #Image 22 and 38 are not included
+            num_unique_patient = length(unique(patient_id)), patient_id = unique(patient_id)) 
+
+## Conclusion: Each patient_id is unique to one patient_id and one ImageNb(the same)
+```
+
+
+
+### Uniqueness of cell type
+
+The columns `cell_type` and `mm` are the cell types for each cells, where `cell_type` is the factor level number and `mm` is the names of the cell_type. There are $16$ different cell types in the dataset.
+
+The following code chunk will perform the diagnostics of these two columns.
+
+```{r}
+# unique values
+unique_celltype <- unique(TNBC$cell_type)
+unique_mm <- unique(TNBC$mm)
+
+# if cell_type and mm have the same number
+dplyr::setequal(length(unique_celltype), length(unique_mm))
+
+# since true, if cell_type and mm are unique to each other
+TNBC %>% 
+  group_by(mm) %>% 
+  summarise(cell_count = n(),
+            num_unique_cellType = length(unique(cell_type)), cell_type = unique(cell_type))
+
+## Conclusion: cell_type and mm are unique to each other(they are redunant)
+```
+
+```{r}
+# names of the cell types
+unique_mm
+
+# tibble of number of samples each cell type present
+TNBC %>% 
+  group_by(mm) %>% 
+  summarise(cell_count = n(), NumOfSamples = n_distinct(sample_id))
+```
+
+
+### Cluster_id
+Cells are clustered into different cell clusters by applying the technique FlowSOM, and it has $113$ cluster for all cells in the `TNBC` dataset.
+
+```{r}
+# unique cluster_id
+unique_clusterId <- sort(unique(TNBC$cluster_id))
+length(unique_clusterId)
+unique_clusterId
+```
+
+The following tibble and graphs show number of `cluster_id` presents in each sample.
+```{r}
+# cluster_id for each sample_id
+TNBC_clusterId <- TNBC %>% 
+  group_by(sample_id) %>% 
+  summarise(cell_count = n(),
+            num_unique_cluster = length(unique(cluster_id)))
+TNBC_clusterId
+
+# Histogram
+hist(TNBC_clusterId$num_unique_cluster,
+     main = "Histogram of Unique Number Clusters for each sample_id",
+     xlab = "Unique cluster_id", ylab = "Counts",
+     breaks = 20, xlim = c(40, 120), ylim = c(0, 10))
+
+# Barplot
+barplot(TNBC_clusterId$num_unique_cluster ~ TNBC_clusterId$sample_id,
+        main = "Count of the Unique Number Clusters for Each sample_id",
+        xlab = "sample_id", ylab = "Number of unique cluster_id",
+        ylim = c(0, 120), width = 1.5, space = 0.3,
+        las = 2, cex.names = 0.7) #las=1 for upright x names
+```
+
+
+
+### Spatial Information
+The two columns, `centroidX` and `centroidY` contain the spatial coordinates $x$ and $y$ for cells in each sample. 
+
+#### All spatial coordiantes
+We first want to investigate the range of all the spatial coordinates by finding their range, median and standard deviation. 
+
+The range of all spatial coordinate $x$ is $(4.512, 2043.474)$, the median is $1054.774$ and standard deviation is $577.792$; the range of all spatial coordinates $y$ is $(3.514, 2044.483)$, the median is is $1055.1165$ and standard deviation is $580.025$.
+
+```{r}
+# subset spatial coordinates
+centroidX <- TNBC$centroidX
+centroidY <- TNBC$centroidY
+
+# Range for the whole dataset
+range_wholeX <- c(min(centroidX), max(centroidX), median(centroidX), sd(centroidX))
+range_wholeX
+
+range_wholeY <- c(min(centroidY), max(centroidY), median(centroidY), sd(centroidY))
+range_wholeY
+```
+
+
+#### Each cell types
+
+We now want to investigate the spatial coordinates by cell types in `TNBC` dataset. The following tibbles include the counts for each cell type along with the range, median and standard deviation of their spatial coordinates in all samples.
+
+```{r}
+# centroidX
+TNBC %>% 
+  group_by(mm) %>% 
+  summarise(count = n(), 
+            min = min(centroidX), max = max(centroidX), 
+            median = median(centroidX), sd = sd(centroidX)) %>% 
+  knitr::kable()
+
+# centroidY
+TNBC %>% 
+  group_by(mm) %>% 
+  summarise(count = n(), 
+            min = min(centroidY), max = max(centroidY), 
+            median = median(centroidY), sd = sd(centroidY)) %>% 
+  knitr::kable()
+```
+
+
+#### Each cell type in each sample
+
+We next want to group the `TNBC` data by sample number and cell type, and investigate the spatial coordinates. The following tibbles include `sample_id` and cell type information along with the range, median and standard deviation of their spatial coordinates in all samples.
+
+```{r, message=FALSE}
+## centroidX
+TNBC %>%
+  group_by(sample_id, mm) %>% 
+  summarise(n = n(), 
+            min = min(centroidX), max = max(centroidX), 
+            median = median(centroidX), sd = sd(centroidX))
+
+## centroidY
+TNBC %>%
+  group_by(sample_id, mm) %>% 
+  summarise(n = n(), 
+            min = min(centroidY), max = max(centroidY), 
+            median = median(centroidY), sd = sd(centroidY))
+```

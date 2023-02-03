@@ -1,0 +1,363 @@
+---
+title: "04_TNBC_SPE_protein"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2022-12-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Overview
+
+This document will create a new spatial experiment object with the protein expression and cells. The document will perform the following:
+
+  1. Construct a count matrix with written function `create_countmat()`
+  2. Construct a colData dataframe with written function `create_colData()`
+  3. Construct a spatial coordinates matrix
+  4. Construct spatial experiment object with count matrix, colData and spatial information
+
+
+## Libraries
+```{r, message=FALSE}
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(cytomapper)
+library(SpatialExperiment)
+```
+
+
+## Reading the CSV output
+
+## Read CSV
+
+Read in the MATLAB revised TNBC output CSV files.
+```{r}
+TNBC <- readr::read_csv(here::here("Data", "MIBI-TNBC_count_output.csv"))
+```
+
+
+## Construct count matrix
+
+The aim of this section is to create a count matric to be used in creating the spatial experiment where the rows are the protein markers, and the columns are all cells in the output matrix. There are total of $36$ protein markers in the TNBC dataset, thus, the expected dimension of this count matrix is 36 rows by 179194 columns(cells).
+
+
+### Test case with sample 1 and sample 2
+
+We first want to create a sample count matrix with only using sample 1 and 2. The expected dimension is $36$ rows by $8232$ columns.
+
+```{r}
+# filter sample dataset of sample 1 and 2
+TNBC_1n2 <- TNBC %>% 
+  filter(sample_id %in% c(1,2))
+dim(TNBC_1n2)
+
+# extract the require columns(last 44 columns)[from 21 to 64]
+TNBC_1n2_require <- TNBC_1n2[, 21:64]
+dim(TNBC_1n2_require) # 44 columns
+names(TNBC_1n2_require)
+
+# De-select metal columns
+TNBC_1n2_require <- TNBC_1n2_require %>% 
+  select(-c("Au", "Background", "Fe", "Ca", "Ta", "Si", "P", "Na"))
+dim(TNBC_1n2_require) # 36 columns
+names(TNBC_1n2_require)
+
+# Transpose
+test_count_1n2 <- t(TNBC_1n2_require)
+```
+
+Count matrix validation
+```{r}
+# checkes
+dim(test_count_1n2)
+rownames(test_count_1n2)
+all.equal(rownames(test_count_1n2), colnames(TNBC_1n2_require))
+```
+The dimensions of the sample count matrix `test_count_1n2` is $36$ rows by $8232$ columns. We shall proceed in writing a function in order to create a count matrix for the entire `TNBC` dataset.
+
+
+### Application to create count matrix
+
+We want to apply the above test case of sample 1 and sample 2 to the entire `TNBC` dataset. We will write a function `create_countMat()` which takes the dataset as an argument and return a count matrix for all samples for the input dataset.
+
+The function performs its functionality by the following steps:
+
+  1. The function takes in the dataset as input, and extract the last 44 columns from the dataset(The first 20 columns are the patients' metadata and spatial information which not required in the count matrix)
+  2. De-select the metal markers "Au", "Background", "Fe", "Ca", "Ta", "Si", "P", and "Na"
+  3. Transpose the current matrix and return as count matrix
+
+This function can add more if-else statement to adapt different dataset format in the future(ie. if the columns has only 62 columns than having 64).
+```{r}
+create_countMat <- function(dataset){
+  
+  # Extract the last 44 columns from the dataset(21 to 64 columns)
+  dataset <- dataset[, 21:64]
+  
+  # De-select metal markers
+  dataset <- dataset %>% 
+    select(-c("Au", "Background", "Fe", "Ca", "Ta", "Si", "P", "Na"))
+  
+  # Transpose the matrix to count matrix
+  count_matrix <- t(dataset)
+  
+  return(count_matrix)
+}
+```
+
+
+**Test Case:** Next, we want to test this function with sample 1 and sample 2 with comparison to the sample count matrix `test_count_1n2`. The results shows that these two count matrix are the same.
+```{r}
+test_countMat <- create_countMat(TNBC_1n2)
+
+all.equal(test_countMat, test_count_1n2)
+```
+
+
+**Application:** We now may apply the function to the entire `TNBC` dataset and obtain its count matrix.
+```{r}
+count_matrix <- create_countMat(TNBC)
+```
+
+```{r}
+dim(count_matrix)
+rownames(count_matrix)
+```
+
+By verification, we have created the count matrix with expected dimensions of $36$ rows by $179194$ columns。
+
+
+
+## Construct colData
+
+The aim of this section is to create colData which to be used in creating the spatial experiment object. The colData will contains $28$ columns from the `TNBC` dataset, which are the columns excepts the protein markers. This allows us to store the patients' metadata and the spatial information of the cells in such colData. These variables will be the columns of colData. and the rows are all cells from the dataset, and thus the expected dimension is $179194$ rows(same length as the column length in the count matrix) by $28$ columns.
+
+### Test case with sample 1 and sample 2
+
+We first want to create a sample colData with only using sample 1 and sample 2. Expected dimension is $8232$ rows by $28$ columns. 
+
+```{r}
+# extract require columns
+test_colData_1n2 <- TNBC_1n2 %>% 
+  select(-rownames(count_matrix))
+
+dim(test_colData_1n2)
+names(test_colData_1n2)
+```
+
+
+### Application to create colData
+We want to apply the above test case of sample 1 and sample 2 to the entire `TNBC` dataset. We will write a function `create_colData()` which takes the dataset as an argument and return a colData data frame for all samples for the input dataset.
+
+The function performs its functionality by the following steps:
+
+  1. The function takes two inputs of dataset and the count matrix
+  2. De-select the column with the row names in the count matrix(protein markers column)
+  3. Return colData data frame
+
+```{r}
+create_colData <- function(dataset, count_matrix){
+  
+  # de-delect the protein markers columns
+  colData <- dataset %>% 
+    select(-rownames(count_matrix))
+  
+  return(colData)
+}
+```
+
+
+**Test Case:** Next, we want to test this function with sample 1 and sample 2 with comparison to the sample count matrix `test_count_1n2`. The results shows that these two count matrix are the same.
+```{r}
+test_colData <- create_colData(TNBC_1n2, count_matrix)
+
+all.equal(test_colData, test_colData_1n2)
+```
+
+
+**Application:** We now may apply the function to the entire `TNBC` dataset and obtain its colData.
+```{r}
+colData <- create_colData(TNBC, count_matrix = count_matrix)
+
+dim(colData)
+names(colData)
+```
+By verification, we have created the count matrix with expected dimensions of $179194$ rows by $28$ columns, and the colnames are correct.
+
+
+## Spatial information
+
+The aim of this section is to create the spatial information for the spatial experiment object. It requires either `SpatialCoords`, a numeric matrix containing spatial spatial coordinates, or `SpatialCoordsNames`, where a character vector specifying which `colData` fields correspond to spatial coordinates. We will construct the spatial experiment obejct using both of the methods.
+
+If we are using `SpatialCoords` approaches, we will need to create a matrix which contains the `centroidX` and `centroidY` from the `colData` dataframe. The expected dimensions of this matrix is $179194$ rows by $2$ columns.
+```{r}
+spatialCoords <- as.matrix(colData[, c("centroidX", "centroidY")])
+```
+
+We verified that the `spatialCoords` matrix dimension is $179194$ rows by $2$ columns.
+```{r}
+head(spatialCoords)
+dim(spatialCoords)
+```
+
+
+## Construct Spatial Experiment
+
+We have constructed the count matrix, colData, and spatial coordinates information, and we now can construct the spatial experiment object for further analysis.
+
+```{r}
+# construct spatial experiment
+spe <- SpatialExperiment(
+  assay = count_matrix,
+  colData = colData,
+  spatialCoordsNames = c("centroidX", "centroidY")
+  #spatialCoords = spatialCoords
+)
+```
+
+```{r}
+spe
+```
+Name assay to "exprs" as the data is not counts but expression(not raw but transformed data)
+```{r}
+assayNames(spe)[1] <- "exprs"
+spe
+```
+
+We also want to modify the names of the sample identity and cell identity variables by adding prefixes, such as "Sample_01" instead of "1" for sample identity, and "Cell_1" instead of "1" for cell identity.
+
+```{r}
+# adding prefixes for cell identity
+colnames(spe) <- paste0("Cell_", 1:dim(assay(spe))[[2]])
+
+# adding prefixes for sample identity
+spe$sample_id[spe$sample_id %in% 1:9] <- (
+  paste0("0", spe$sample_id[spe$sample_id %in% 1:9])
+   )
+spe$sample_id <- paste0("Sample_", spe$sample_id)
+```
+
+We want to verify if we have added the prefixes correctly.
+```{r}
+# checking sample identity
+unique(spe$sample_id)
+# checking cell identity
+spe
+```
+
+
+## Images and segmentation masks
+
+We want to read in multi-channel images and segmentation masks using `cytomapper` to `CytoImageList` objects which defined with `EBImage`, both in TIFF files format. Save them in the next step for further analysis.
+
+```{r eval=FALSE}
+images <- cytomapper::loadImages("/Users/henzhwang/Desktop/TNBC_training/denoised/",
+                                 pattern = "TA459_multipleCores2_Run-4_Point")
+masks <- cytomapper::loadImages("/Users/henzhwang/Desktop/TNBC_training/segmentation/",
+                                pattern = "segmentationmask_Point") #, as.is = TRUE)
+```
+
+Next, we want to set channel names to the images beneficial to visualization.
+```{r eval=FALSE}
+## NOTE: Channel Names from the spe are only the 36 protein markers
+## There are total of 44 channels in the images !!
+## Images read have 44 channels
+
+#channelNames(images) <- rownames(spe)
+
+## NOTE: some channelNames are different from the csv file
+## ie. "Beta catenin" = "betaCaterin", "HLA-DR" = "HLADR", "phospho-S6" = "pS6"
+channelNames(images) <- c("Au",
+                          "Background",
+                          "Beta catenin",
+                          "Ca",
+                          "CD11b",
+                          "CD11c",
+                          "CD138",
+                          "CD16",
+                          "CD20",
+                          "CD209",
+                          "CD3",
+                          "CD31",
+                          "CD4",
+                          "CD45",
+                          "CD45RO",
+                          "CD56",
+                          "CD63",
+                          "CD68",
+                          "CD8",
+                          "dsDNA",
+                          "EGFR",
+                          "Fe",
+                          "FoxP3",
+                          "H3K27me3",
+                          "H3K9ac",
+                          "HLA_Class_1",
+                          "HLA-DR",
+                          "IDO",
+                          "Keratin17",
+                          "Keratin6",
+                          "Ki67",
+                          "Lag3",
+                          "MPO",
+                          "Na",
+                          "P",
+                          "p53",
+                          "Pan-Keratin",
+                          "PD1",
+                          "PD-L1",
+                          "phospho-S6",
+                          "Si",
+                          "SMA",
+                          "Ta",
+                          "Vimentin"
+)
+images
+```
+
+Next, we set the sample identity to both the images container and segmentation masks container.
+
+```{r eval=FALSE}
+## NOTE: There are only 39 images (Patient 22 and 38 were excluded)
+mcols(images)$ImageNb <- c("1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
+                            "2", "20", "21", "23", "24", "25", "26", "27", "28", "29",
+                            "3", "30", "31", "32",	"33",	"34",	"35",	"36",	"37",	"39",
+                            "4", "40", "41", "5",	"6",	"7",	"8",	"9")
+mcols(images)
+
+mcols(masks)$ImageNb <- c("1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
+                            "2", "20", "21", "23", "24", "25", "26", "27", "28", "29",
+                            "3", "30", "31", "32",	"33",	"34",	"35",	"36",	"37",	"39",
+                            "4", "40", "41", "5",	"6",	"7",	"8",	"9")
+mcols(masks)
+```
+
+
+## Save Spatial experiment object
+
+Saving constructed spe object as RDS file.
+
+```{r}
+save(spe, file = here::here("Output", "Data", "03_TNBC_2018_spe.rds"))
+```
+
+
+```{r}
+#save(spe, file = "04_TNBC_SPE_protein.rds")
+#save(images, file = "04_TNBC_images.rds")
+#saveRDS(masks, file = "04_TNBC_masks.rds")
+```

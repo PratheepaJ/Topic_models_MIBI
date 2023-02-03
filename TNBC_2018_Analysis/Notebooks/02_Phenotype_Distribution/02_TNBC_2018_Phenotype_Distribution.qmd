@@ -1,0 +1,239 @@
+---
+title: "02_TNBC_2018_Phenotype_Distribution"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+  html:
+    toc: yes
+date: "2022-11-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+
+## Overview
+
+This document aims to analyze the phenotype distribution with `sample_id` and `cluster_id` in the `TNBC` dataset. The analysis will include following steps:
+
+  1. Count the number of cells for each cell type in each sample, then draw histogram to determine the cell count interval. Construct a heatmap of phenotype distribution with sample number.
+  2. Inverstigate the cell type information for each cluster number by FlowSOM and their proportion, and construct a heatmap of phenotype distribution with cluster number
+
+
+
+
+## Libraries
+```{r, message=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(formattable)
+library(RColorBrewer)
+```
+
+
+## Read CSV
+
+Read in the MATLAB revised TNBC output CSV files.
+```{r}
+TNBC <- readr::read_csv(here::here("Data", "MIBI-TNBC_count_output.csv"))
+```
+
+
+
+## Phenotype-Sample distribution
+
+We want to construct a heatmap of the phenotype distribution of sample number and cell types. 
+
+### Cell type count histogram
+
+To perform this, we first need to obtain the cell type count in each sample. Then, construct histogram to observe the distribution of cell type counts for all sample in order to determine the cut-off values for further analysis.
+
+```{r}
+# cell type count in each sample
+cell_count <- dplyr::count(TNBC, sample_id, mm) %>% 
+  dplyr::rename(count = n)
+head(cell_count)
+```
+
+```{r, fig.height=4.5, fig.width=8}
+# histogram 1(all count)
+hist(cell_count$count,
+     main = "Histogram of all cell type count",
+     xlab = "Cell type count", ylab = "Counts")
+```
+
+We notice that majority of the distribution is less then 1000 count, we want to draw a new histogram to observe closer. We now draw the histrogram for count up to $1000$.
+
+```{r, fig.height=4.5, fig.width=8}
+# histogram 2(count up to 1000)
+hist(cell_count$count[cell_count$count < 1000],
+     main = "Histogram of cell type count < 1000",
+     xlab = "Cell type count", ylab = "Counts",
+     breaks = 20)
+```
+
+We notice again that majority of this new distribution is less than $200$, we now draw another histogram for cell type count up to $200$.
+```{r, fig.height=4.5, fig.width=8}
+# histogram 2(count up to 200)
+hist(cell_count$count[cell_count$count < 200],
+     main = "Histogram of cell type count < 200",
+     xlab = "Cell type count", ylab = "Counts",
+     breaks = 40)
+```
+
+### Phenotype-sample distribution heatmap
+By the above histograms, we can clearly see most of the cell type count are less than $50$, and thus we have conentrate our cut-off value on $0-50$. We will have $11$ value interval to be plotted in the distribution heatmap, and the value interval are 0-1, 1-5, 5-10, 10-25, 25-50, 50-100, 100-250, 250-500, 500-1000, 1000-2000, and greater than 2000.
+
+```{r}
+# adding additional 0 to sample_id 1-9
+TNBC$sample_id[TNBC$sample_id < 10] <- paste0("0", TNBC$sample_id[TNBC$sample_id < 10])
+```
+
+```{r, message=FALSE,fig.height=6, fig.fullwidth=TRUE}
+# phenotype-sample distribution heatmap
+TNBC %>% 
+  with(table(sample_id, mm)) %>% 
+  as.data.frame() %>% 
+  mutate(sample_id = paste("Sample", sample_id)) %>%
+  mutate(count = cut(as.numeric(Freq), breaks = c(-1, 1.1, 5.1, 10.1, 
+                                   25.1, 50.1, 100.1, 250.1, 500.1, 1000.1, 2000.1, max(Freq, na.rm = TRUE)+1),
+                     labels = c("0-1", "1-5", "5-10", "10-25", "25-50",
+                                "50-100", "100-250", "250-500", "500-1000", "1000-2000", ">2000"))) %>% 
+  mutate(count = factor(as.character(count), levels = rev(levels(count)))) %>% 
+  
+  ggplot(mapping = aes(x = mm, y = sample_id, fill = count)) +
+    geom_tile(colour = "white", linewidth = 0.3) +
+  
+    # labels
+    guides(fill=guide_legend(title = "Number of Cells \nin Each Sample"))+
+    labs(x = "Phenotype", y = " sample_id", title = "Phenotype-Sample Distribution of Triple Negative Breast Cancer")+
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_x_discrete(expand = c(0, 0)) +
+    
+    # color palette
+    #scale_fill_manual(values = rev(brewer.pal(11, "RdGy")), na.value = "azure4") + #RdGy RdBu
+    scale_fill_manual(values = brewer.pal(11, "RdBu"), na.value = "azure4") + 
+  
+    # theme
+    theme_grey(base_size = 10)+
+    theme(legend.position = "right", legend.direction = "vertical",
+        legend.title = element_text(colour = "black", size = 6),
+        legend.margin = margin(grid::unit(0, "cm")),
+        legend.text = element_text(colour = "grey40", size = 6, face = "bold"),
+        legend.key.height = grid::unit(0.8, "cm"),
+        legend.key.width = grid::unit(0.2, "cm"),
+        axis.text.x = element_text(size = 7, colour = "grey40"),
+        axis.text.y = element_text(vjust = 0.2, colour = "grey40"),
+        axis.ticks = element_line(linewidth = 0.4),
+        plot.background = element_blank(),
+        panel.border = element_blank(),
+        plot.margin = margin(0.7, 0.4, 0.1, 0.2, "cm"),
+        plot.title = element_text(colour = "grey40", hjust = 0, size = 11, face = "bold")
+     )+
+    #scale_x_discrete(guide = guide_axis(n.dodge = 2)) # separate x label into two levels
+    scale_x_discrete(guide = guide_axis(angle = 45))  # rotating x label angle
+```
+
+
+
+## Phenotype-cluster distribution
+
+We want to construct a heatmap of the phenotype distribution of cluster number by FlowSOM and cell types. 
+
+### Cluster_id Diagnostics
+
+To perform this, we first want to investigate the count of cell type in each cluster and their correponding proportion. 
+There are $113$ clusters present in the dataset where there are at most different cell types in each cluster. The following table shows information about the clusters such as cluster number, cell types in the cluster, and the proportion of cell types. The proportion is able to indicate if the clusters are dominated by one cell type and possibly implies the accuracy of the FlowSOM clustering technique.
+
+Variables used in the tables are:
+
+  - cluster_id: Cluster number
+  - cell_n: Number of cells in the cluster
+  - n_ct: Number of unique cell types in the cluster
+  - ct1, ct2, ct3: Cell type
+  - ct1_n, ct2_n, ct3_n: Number of corresponding cell types in the cluster
+  - ct1_f, ct2_f, ct3_f: Proportion of corresponding cell type in the cluster
+  
+```{r}
+# number of cell_type for each cluster_id
+TNBC %>% 
+  group_by(cluster_id) %>% 
+  summarise(cell_n = n(),
+            n_ct = n_distinct(mm), # mm and cell_type are the same
+            ct1 = as.character(as.list(unique(mm))[1]),
+            ct1_n = sum(mm == as.character(as.list(unique(mm))[1])),
+            ct2 = as.character(as.list(unique(mm))[2]),
+            ct2_n = sum(mm == as.character(as.list(unique(mm))[2])),
+            ct3 = as.character(as.list(unique(mm))[3]),
+            ct3_n = sum(mm==as.character(as.list(unique(mm))[3]))) %>% 
+  mutate(ct1_f = formattable::percent(ct1_n / cell_n),
+         ct2_f = formattable::percent(ct2_n / cell_n),
+         ct3_f = formattable::percent(ct3_n / cell_n)) %>% 
+  dplyr::relocate(ct1_f, .after = ct1_n) %>% 
+  dplyr::relocate(ct2_f, .after = ct2_n) %>% 
+  dplyr::relocate(ct3_f, .after = ct3_n) %>% 
+  #knitr::kable()
+  formattable::formattable(list(ct1_f = color_bar(color = "lightblue"),
+                           ct2_f = color_bar(color = "lightpink"),
+                           ct3_f = color_bar(color = "lightgreen"))) # for html
+```
+
+
+### Phenotype-cluster distribution
+
+Now we want to draw a heatmap of prototypes and cluster number.
+
+```{r, message=FALSE, fig.height=7.75, fig.fullwidth=TRUE}
+as.data.frame(with(TNBC, table(cluster_id, mm))) %>%
+  ggplot() +
+    #geom_tile(aes(x = cluster_id, y = mm, fill = Freq)) +
+    geom_tile(aes(x = mm, y = cluster_id, fill = Freq)) +
+  
+    # colour palettes
+    scale_fill_distiller(palette = "RdBu", na.value = "azure4")+
+    # labels
+    guides(fill=guide_legend(title = "Number of Cells \nin Each Cluster"))+
+    labs(x = "Phenotype", y = " cluster_id", 
+         title = "Phenotype-Cluster Distribution of Triple Negative Breast Cancer")+
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_x_discrete(expand = c(0, 0)) +
+
+    # theme
+    theme_grey(base_size = 10)+
+    theme(legend.position = "right", legend.direction = "vertical",
+        legend.title = element_text(colour = "black", size = 6),
+        legend.margin = margin(grid::unit(0, "cm")),
+        legend.text = element_text(colour = "grey40", size = 6, face = "bold"),
+        legend.key.height = grid::unit(0.8, "cm"),
+        legend.key.width = grid::unit(0.2, "cm"),
+        axis.text.x = element_text(size = 7, colour = "grey40"),
+        axis.text.y = element_text(size = 5, vjust = 0.2, colour = "grey40"),
+        axis.ticks = element_line(linewidth = 0.4),
+        plot.background = element_blank(),
+        panel.border = element_blank(),
+        plot.margin = margin(0.7, 0.4, 0.1, 0.2, "cm"),
+        plot.title = element_text(colour = "grey40", hjust = 0, size = 11, face = "bold")
+     ) +
+    scale_x_discrete(guide = guide_axis(angle = 45))
+```
+
+
+
+
+## Reference
+[A guide to elegant tiled heatmaps in R](https://www.royfrancis.com/a-guide-to-elegant-tiled-heatmaps-in-r-2019/)
+
+[Formattable Vignettes](http://renkun-ken.github.io/formattable/articles/formattable-data-frame.html)
