@@ -5,14 +5,16 @@
 #' @param K integer. number of topics.
 #' @param iterUse integer. number of iterations used in each chain.
 #' @param chain integer. number of chains used in MCMC.
+#' @param method function. correlation function to use in finding the topics similarities. 
 #' @param SampleID_name character. variable name that contains sample IDs.
 #'
 #' @return matrix. A matrix of topic assignment for each chain.
-#' @importFrom magrittr %>%
+#' @importFrom magrittr |>
 #' @importFrom dplyr left_join filter select
 #' @import SpatialExperiment
 #' @importFrom reshape2 melt
 #' @importFrom stats cor
+#' @importFrom lsa cosine
 #' @export
 #'
 
@@ -21,7 +23,20 @@ alignmentMatrix <- function(theta,
                             K,
                             iterUse = 2000,
                             chain = 4,
+                            #cor_method = c("cor", "cosine"),
                             SampleID_name = "sample_id"){
+  
+  # define the default correlation method
+  # if (missing(cor_method)) {
+  #   cor_method = cor
+  #   print("1")
+  # } else if (cor_method == "cor") {
+  #   cor_method = cor
+  #   print("2")
+  # } else if (cor_method == "cosine"){
+  #   cor_method = lsa::cosine
+  #   print("3")
+  # }
   
   Chain <- Topic <- topic.dis <- NULL
   # theta is a 3 dimensional array (iterations * samples * topic)
@@ -36,6 +51,7 @@ alignmentMatrix <- function(theta,
   theta_all = reshape2::melt(theta)
   colnames(theta_all) = c("iteration", "Sample", "Topic", "topic.dis")
   theta_all$Chain = paste0("Chain ", rep(seq(1, chain), each = (iterUse/2)))
+  
   theta_all$Topic = factor(theta_all$Topic)
   theta_all$Chain = factor(theta_all$Chain)
   theta_all$Sample = as.character(theta_all$Sample)
@@ -43,10 +59,6 @@ alignmentMatrix <- function(theta,
   
   # join the SpatialExperimet object column data to theta_all
   ## colData gets the metadata (clinical data)
-  # sam = (colData(spe) 
-  #        |> data.frame()
-  # )
-  
   sam = (colData(spe)[1:9]
          |> unique()
          |> data.frame()
@@ -66,9 +78,9 @@ alignmentMatrix <- function(theta,
   for(j in 1:K) { #Topic of first chain
     chains <- lapply(as.list(1:chain), function(x){
       for(top in 1:K){
-        corrTop[top] <- cor(theta_all %>% dplyr::filter(Chain == "Chain 1") %>% dplyr::filter(Topic == paste0("Topic_", j)) %>% dplyr::select(topic.dis),
-                            theta_all %>% dplyr::filter(Chain == paste0("Chain ",x)) %>% dplyr::filter(Topic == paste0("Topic_", top)) %>% dplyr::select(topic.dis))
-        
+        corrTop[top] <- cor(
+          theta_all |> dplyr::filter(Chain == "Chain 1") |> dplyr::filter(Topic == paste0("Topic_", j)) |> dplyr::select(topic.dis),
+          theta_all |> dplyr::filter(Chain == paste0("Chain ",x)) |> dplyr::filter(Topic == paste0("Topic_", top)) |> dplyr::select(topic.dis))
       }
       return(which(corrTop == max(corrTop)))
     })

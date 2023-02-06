@@ -14,6 +14,14 @@ output:
 date: "2023-01-24"
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+
 ```{r warning=FALSE, message=FALSE}
 #library(phyloseq)
 library(dplyr)
@@ -283,7 +291,7 @@ spe
 
 ### Document-Term Matrix
 
-We first want to create the document-term matrix of the dataset where the rows are the sample identity and columns are the cell types fill with counts. The expected dimmension of the DTM is 39 rows by 16 columns.
+We first want to create the document-term matrix of the dataset where the rows are the sample identity and columns are the cell types fill with counts. The expected dimension of the DTM is 39 rows by 16 columns.
 
 ```{r}
 dtm <- table(spe$sample_id, spe$mm)

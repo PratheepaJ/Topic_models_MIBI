@@ -20,16 +20,20 @@ thetaAligned <- function(theta,
   theta_chain <- list()
   theta_chain[[1]] <- theta[1:(iterUse), ,]
   theta_chain[[1]] <- theta_chain[[1]][, aligned[,1],]
+  
+  theta_aligned <- theta_chain[[1]]
 
   for(ch in 2:chain){
     theta_chain[[ch]] <- theta[((ch-1)*(iterUse)+1):(ch*(iterUse)),,]
     theta_chain[[ch]] <- theta_chain[[ch]][,aligned[,ch],]
+    
+    theta_aligned <- abind::abind(theta_aligned, theta_chain[[ch]], along = 1)
   }
 
-  theta_aligned <- abind(theta_chain[[1]], theta_chain[[2]], along = 1)
-  for(ch in 3:chain){
-    theta_aligned <- abind(theta_aligned, theta_chain[[ch]], along = 1)
-  }
+  # theta_aligned <- abind(theta_chain[[1]], theta_chain[[2]], along = 1)
+  # for(ch in 3:chain){
+  #   theta_aligned <- abind(theta_aligned, theta_chain[[ch]], along = 1)
+  # }
   # switch back samples and Topic dimension in array
   theta_aligned <- aperm(theta_aligned, c(1,3,2))
 
