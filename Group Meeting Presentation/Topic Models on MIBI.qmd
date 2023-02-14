@@ -1,0 +1,51 @@
+---
+title: "Topic Models on MIBI \n Triple Negative Breast Cancer"
+author: "Shiheng Huang"
+format: 
+  beamer: default
+  # revealjs: 
+  #   smaller: true
+  
+editor: visual
+---
+
+## Research Question
+
+Aim to better characterize the tumor microenviroment(TME):
+
+-   Does the organization of defined regions within a tissue correlate with the type of immune cells that are within those regions?
+
+-   Are there any interactions between specified cell types within the tissues, and does this change with disease context?
+
+-   Can this information inform further experimentation to elucidate the mechanism of action that have been shown to correlate with a clinical outcome?
+
+::: notes
+The tumor microenvironment(TME) is now recognized as an important determinant of patient outcome. We want to find an approach which can better characterize the TME in understanding how does the tumor structure (cells compartment) correlates to the patient outcomes. Here are some of the example question we aim to answer:
+:::
+
+## Our Goal
+
+To answer the research questions, the desired methodologies would:
+
+-   Able to help in organize larger collections of complex organization and functional attributes of a tissue specimen
+
+-   Able to offer insights on the composition and structure of a tissue or tumor and find relations of different composition to patients outcome
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished presentation. To learn more about Quarto presentations see <https://quarto.org/docs/presentations/>.
+
+## Bullets
+
+When you click the **Render** button a document will be generated that includes:
+
+-   Content authored with markdown
+-   Output from executable code
+
+## Code
+
+When you click the **Render** button a presentation will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
