@@ -19,5 +19,7 @@ load_lda_result <- function(file) {
     include = TRUE
   )
   
-  return(res)
+
+  return(list(stan.fit,
+              res))
 }

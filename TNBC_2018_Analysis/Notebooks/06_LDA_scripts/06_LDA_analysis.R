@@ -19,11 +19,13 @@ LDA_analysis <- function(
     K,
     alpha,
     gamma,
-    iter,
-    chain,
+    warm_up_iter = NULL,
+    iter = 2000,
+    chain = 2,
     col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
     col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
     stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
+    cellTypeIndexToPlot = c(1:16),
     load_file = TRUE,
     save_file = FALSE,
     file_default = TRUE,
@@ -167,7 +169,12 @@ LDA_analysis <- function(
   # check whether number of chains are greater than 1
   chain_cond <- isTRUE(chain > 1)
   
-  iterUse = iter/2 # number of iterations used in MCMC(subtract warm-up samples) 
+  # determine the iteration used in posterior sampling (subtract warm up iterations)
+  if (is.null(warm_up_iter)) {
+    iterUse = iter / 2
+  } else {
+    iterUse = iter - warm_up_iter
+  } # number of iterations used in MCMC(subtract warm-up samples) 
   cond = 0 # identifier for future if statements
   
   
@@ -296,14 +303,20 @@ LDA_analysis <- function(
   Sample <- Topic <- topic.dis <- NULL
   median.topic.dis <- median <- NULL
   
+  theta_long <- reshape2::melt(theta_aligned) |> as_tibble()
+  colnames(theta_long) = col_names_theta_all
+  #theta_long$Chain = paste0("Chain ", rep(seq(1, chain), each = (iterUse)))
+  
+  
   # factor variables
-  theta_all$Topic <- factor(theta_all$Topic)
-  theta_all$Sample <- factor(theta_all$Sample)
+  #theta_long$Chain <- factor(theta_long$Chain)
+  theta_long$Topic <- factor(theta_long$Topic)
+  theta_long$Sample <- factor(theta_long$Sample)
   #theta_all$pna <- factor(theta_all$pna)
   
   # summary theta distribution
-  theta_summary <- ( theta_all |> 
-    dplyr::group_by(
+  theta_summary <- ( theta_long 
+    |> dplyr::group_by(
       Sample,
       Topic
       #,pna
@@ -333,20 +346,20 @@ LDA_analysis <- function(
   
   p_topic_prop <- p_topic_prop +
     ggplot2::geom_tile(
-      ggplot2::aes(alpha = median.topic.dis)
+      ggplot2::aes(fill = median.topic.dis)
     ) +
     # ggplot2::facet_grid(
     #   .~Sample,
     #   scale = "free"
     # ) +
     ggplot2::xlab("Sample") +
-    # ggplot2::scale_fill_manual(
-    #   name = "pna",
-    #   values = c("steelblue1","green3")
+    ggplot2::scale_fill_gradientn(
+      name = "Median Topic \ndistribution",
+      colors = c("gray98", "#E69F00")
+      ) +
+    # ggplot2::scale_alpha(
+    #   name = "Median Topic \ndistribution"
     # ) +
-    ggplot2::scale_alpha(
-      name = "median topic \ndistribution"
-    ) +
     ggplot2::theme_classic(
       base_size = 20
     ) +
@@ -356,7 +369,18 @@ LDA_analysis <- function(
     ) +
     ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(angle = 90))
     
-  
+  # source(here::here("Notebooks", 
+  #                   "06_LDA_scripts", "06_LDA_analysis.R"))
+  # 
+  # 
+  # p_topic_prop <- plotTopicProportion(
+  #   spe = spe,
+  #   theta_aligned = theta_aligned,
+  #   K = K,
+  #   chain = 4,
+  #   iter = 2000,
+  #   SampleID_name = "sample_id"
+  # )
   
   
   
@@ -409,28 +433,223 @@ LDA_analysis <- function(
   
   
   
+  
+  ################### Model Diagnostics ###################
+  
+  Rhat_theta  <- ESS_bulk_theta <- matrix(
+    nrow = dim(theta_aligned)[2],
+    ncol = dim(theta_aligned)[3]
+  )
+  
+  # ESS_bulk_theta <- matrix(
+  #   nrow = dim(theta_aligned)[2],
+  #   ncol = dim(theta_aligned)[3]
+  # )
+  
+  
+  for(sam in 1:dim(theta_aligned)[2]){
+    for(top in 1:dim(theta_aligned)[3]){
+      sims_theta <- matrix(
+        theta_aligned[ ,sam , top],
+        nrow = (iterUse),
+        ncol = chain,
+        byrow = FALSE
+      )
+      Rhat_theta[sam, top] <- rstan::Rhat(sims_theta)
+      ESS_bulk_theta[sam, top] <- rstan::ess_bulk(sims_theta)
+    }
+    
+  }
+  
+  Rhat_theta <- as.vector(Rhat_theta)
+  ESS_bulk_theta <- as.vector(ESS_bulk_theta)
+  
+  
+  Rhat_beta <- ESS_bulk_beta <- matrix(
+    nrow = dim(beta_aligned)[2],
+    ncol = dim(beta_aligned)[3]
+  )
+  # ESS_bulk_beta <- matrix(
+  #   nrow = dim(beta_aligned)[2],
+  #   ncol = dim(beta_aligned)[3]
+  # )
+  
+  
+  for(top in 1:dim(beta_aligned)[2]){
+    for(fea in 1:dim(beta_aligned)[3]){
+      sims_beta <- matrix(
+        beta_aligned[ , top, fea],
+        nrow = (iterUse),
+        ncol = chain,
+        byrow = FALSE)
+      Rhat_beta[top, fea] <- rstan::Rhat(sims_beta)
+      ESS_bulk_beta[top, fea] <- rstan::ess_bulk(sims_beta)
+      
+    }
+    
+  }
+  
+  Rhat_beta <- as.vector(Rhat_beta)
+  ESS_bulk_beta <- as.vector(ESS_bulk_beta)
+  
+  
+  Rhat <- c(Rhat_theta, Rhat_beta)
+  
+  
+  ESS_bulk <- c(ESS_bulk_theta, ESS_bulk_beta)
+  
+  
+  
+  # R hat ~ 1.05
+  p_rhat <- ggplot2::ggplot(
+    data.frame(Rhat = Rhat)
+  ) +
+    ggplot2::geom_histogram(
+      aes(x = Rhat),
+      fill = "lavender",
+      colour = "black",
+      bins = 100
+    ) +
+    ggplot2::theme(
+      plot.title = element_text(hjust = 0.5)
+    )  +
+    ggplot2::theme_minimal(base_size = 20) +
+    ggplot2::xlab("")
+  
+  
+  
+  # ESS bulk and ESS tail at least 100 per Markov Chain in order to be reliable and indicate that estimates of respective posterior quantiles are reliable
+  
+  p_ess_bulk <- ggplot2::ggplot(
+    data.frame(ESS_bulk = ESS_bulk)
+  ) +
+    ggplot2::geom_histogram(
+      aes(x = ESS_bulk),
+      fill = "lavender",
+      colour = "black",
+      bins = 100
+    ) +
+    ggplot2::theme(
+      plot.title = element_text(hjust = 0.5)
+    )   +
+    ggplot2::theme_minimal(
+      base_size = 20
+    ) +
+    ggplot2::xlab("")
+  
+  
+  
+  
+  ################### Model Assessment ###################
+  
+  value <- Var2 <- NULL
+  
+  x <- dtm
+  
+  # draws from posterior predictive distribution
+  x_sim <- samples$x_sim[1:iterUse, , ] # iteration * samples * topics
+  
+  # choose only the first chain
+  max_all <- apply(x_sim[1, , ], 2, max)
+  
+  # find the maximum of each cell types in each iteration acorss sample 
+  for (i in 2:iterUse){
+    max_x_sim_i <- apply(
+      x_sim[i, ,], 
+      2,
+      max)
+    max_all <- rbind(max_all, max_x_sim_i)
+  }
+  
+  rownames(max_all) <- c(
+    paste0(
+      "x_max_rep",
+      seq(1, iterUse)
+    )
+  )
+  
+  colnames(max_all) <- colnames(x)
+  #return(max_all)
+  
+  # subset the interested phenotype
+  max_all <- max_all[, cellTypeIndexToPlot]
+  max_all_long <- reshape2::melt(max_all)
+  
+  
+  # finding the observed maximum value 
+  x_max_cellCount <- data.frame(
+    Var1 = rep(
+      "x_max_obs",
+      dim(x)[2]
+    ),
+    Var2 = colnames(x),
+    count = apply(x, 2, max)
+  )
+  
+  # subset the interested phenotype
+  x_max_cellCount <- x_max_cellCount[cellTypeIndexToPlot, ]
+  
+  
+  # plotting
+  p_hist <- ggplot2::ggplot(
+    data = max_all_long
+  ) +
+    ggplot2::geom_histogram(
+      aes(
+        x = value,
+        group = Var2
+      ),
+      color = "#0072B2",
+      fill = "#0072B2",
+      bins = 50) +
+    ggplot2::xlab("maximum")+
+    
+    ggplot2::facet_wrap(~Var2, nrow = 4) +
+    
+    ggplot2::geom_vline(
+      data = x_max_cellCount,
+      aes(xintercept = count),
+      color = "#CC79A7"
+    ) +
+    ggplot2::theme_update(
+      text = element_text(size = 8)
+    )
+  
+  
+  
+  
+  
   ################### Return List  ###################
   if (cond == 3) {
     return_list <- list(
-      dtm,
-      samples,
-      theta,
-      beta,
-      aligned,
-      theta_aligned,
-      beta_aligned,
-      p_topic_prop,
-      p_cellType_prop
+      DTM = dtm,
+      stan.fit = stan.fit,
+      pos_samples = samples,
+      theta = theta,
+      beta = beta,
+      alignment_matrix = aligned,
+      theta_aligned = theta_aligned,
+      beta_aligned = beta_aligned,
+      plot_topic_prop = p_topic_prop,
+      plot_cellType_prop = p_cellType_prop,
+      plot_ESS = p_ess_bulk,
+      plot_rhat = p_rhat,
+      plot_model_assessment = p_hist
+      
     )
     
   } else if (cond == 0) {
     return_list <- list(
-      dtm,
-      samples,
-      theta,
-      beta,
-      p_topic_prop,
-      p_cellType_prop
+      DTM = dtm,
+      stan.fit = stan.fit,
+      pos_samples = samples,
+      theta = theta,
+      beta = beta,
+      plot_topic_prop = p_topic_prop,
+      plot_cellType_prop = p_cellType_prop,
+      plot_ESS = p_ess_bulk,
+      plot_rhat = p_rhat,
+      plt_model_assessment = p_hist
     )
   }
   

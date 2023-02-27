@@ -21,7 +21,8 @@
 alignmentMatrix <- function(theta,
                             spe,
                             K,
-                            iterUse = 2000,
+                            warm_up_iter = NULL,
+                            iter = 2000,
                             chain = 4,
                             #cor_method = c("cor", "cosine"),
                             SampleID_name = "sample_id"){
@@ -41,6 +42,15 @@ alignmentMatrix <- function(theta,
   Chain <- Topic <- topic.dis <- NULL
   # theta is a 3 dimensional array (iterations * samples * topic)
   
+  # determine the iteration used in posterior sampling (subtract warm up iterations)
+  if (is.null(warm_up_iter)) {
+    iterUse = iter / 2
+  } else {
+    iterUse = iter - warm_up_iter
+  }
+  
+  
+  
   ## acquire sample identity
   dimnames(theta)[[2]] <- unique(spe$sample_id)
   ## acquire topic number
@@ -50,7 +60,7 @@ alignmentMatrix <- function(theta,
   ## melt() takes wide-format data and melts into long-format data
   theta_all = reshape2::melt(theta)
   colnames(theta_all) = c("iteration", "Sample", "Topic", "topic.dis")
-  theta_all$Chain = paste0("Chain ", rep(seq(1, chain), each = (iterUse/2)))
+  theta_all$Chain = paste0("Chain ", rep(seq(1, chain), each = (iterUse)))
   
   theta_all$Topic = factor(theta_all$Topic)
   theta_all$Chain = factor(theta_all$Chain)

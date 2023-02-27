@@ -1,0 +1,613 @@
+---
+title: "04_TNBC_2018_Spiat"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2023-01-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Libaries
+```{r warning=FALSE, message=FALSE}
+# BiocManager::install("SPIAT")
+library(SPIAT)
+library(dplyr)
+#library(ggspavis)
+library(ggplot2)
+library(SpatialExperiment)
+```
+
+```{r}
+# colour_pal <- c(
+#   "#6600CC",
+#   "#CC0066",
+#   "#CC0066",
+#   "#FF0000",
+#   "#FFFF00",
+#   "#C65911",
+#   "#66FF33",
+#   "#66FF99",
+#   "#0070C0",
+#   "#92D050",
+#   "#66FFFF",
+#   "#2F02BE",
+#   "purple",
+#   "brown",
+#   "green",
+#   "grey"
+# )
+```
+
+## Identifying Phenotype compartment
+
+```{r}
+immune_names <- c("B", "CD3 T", "CD4 T", "CD8 T", "DC", "DC/Mono", 
+                  "T reg", "NK", "Mono/Neu", "Neu", "Mac", "Other immune")
+nonimmune_names <- c("Endothelial", "Epithelial", "Mesenchymal")
+tumor_names <- c("Other")
+```
+
+## Load RDS file of SPE
+
+Load the spatial experiment object created earlier.
+```{r}
+load(here::here("Output", "Data", "03_SPE", "03_TNBC_2018_spe.rds"))
+```
+
+Check the SpatialExperiment object.
+```{r}
+#spe
+colnames(spe) <- paste0("Cell_", 1:dim(assay(spe))[[2]])
+spe
+```
+
+
+### Define color schemes for each phenotype
+
+We want to define color for each phenotype, and keeping the color consistent in all samples.
+```{r}
+color_vectors <- list()
+
+phenotype_col <- setNames(object = c(
+  "#6600CC",
+  "#CC0066",
+  "#CC0066",
+  "#FF0000",
+  "#FFFF00",
+  "#C65911",
+  "#66FF33",
+  "#66FF99",
+  "#0070C0",
+  "#92D050",
+  "#66FFFF",
+  "#2F02BE",
+  "purple",
+  "brown",
+  "green",
+  "grey"), unique(spe$mm))
+phenotype_col
+color_vectors$phenotype <- phenotype_col
+```
+
+```{r}
+# phenotype_col <- data.frame(Type = unique(spe$mm),
+#                             Colour = c(
+#   "#6600CC",
+#   "#CC0066",
+#   "#CC0066",
+#   "#FF0000",
+#   "#FFFF00",
+#   "#C65911",
+#   "#66FF33",
+#   "#66FF99",
+#   "#0070C0",
+#   "#92D050",
+#   "#66FFFF",
+#   "#2F02BE",
+#   "purple",
+#   "brown",
+#   "green",
+#   "grey"))
+```
+
+
+### Subsetting
+
+Subset spe with sampel 1.
+```{r}
+spe_1 <- spe[, spe$sample_id %in% c("Sample_12")]
+#celltype <- tibble(spe_1$mm)
+#coordX <- tibble(spatialCoords(spe_1)[, "centroidX"])
+#coordY <- tibble(spatialCoords(spe_1)[, "centroidY"])
+celltype <- spe_1$mm
+coordX <- spatialCoords(spe_1)[, "centroidX"]
+coordY <- spatialCoords(spe_1)[, "centroidY"]
+```
+
+
+## Transform spe into SPIAT format
+
+We want to transform the colData into the SPIAT format to further analysis with SPIAT packages.
+
+```{r}
+spiat_sample1 <- SPIAT::format_image_to_spe(format = "general",
+                                    intensity_matrix = assay(spe_1),
+                                    phenotypes = celltype,
+                                    coord_x = coordX,
+                                    coord_y = coordY)
+spiat_sample1
+```
+
+### Penotype compartment in the tissue
+```{r}
+unique_cells <- unique(spiat_sample1$Phenotype)
+immune_cells <- base::subset(unique_cells, unique_cells %in% immune_names)
+nonimmune_cells <- base::subset(unique_cells, unique_cells %in% nonimmune_names)
+tumor_cells <- base:: subset(unique_cells, unique_cells %in% tumor_names)
+```
+
+
+### Colour panel for each tissue
+
+We need to customize colour panel for each tissue as they contain different number of unique phenotype (for SPIAT plotting purpose).
+
+```{r}
+colour_pal <- phenotype_col[unique_cells]
+colour_pal
+```
+
+
+## Visualizing tissues
+
+We want to visualize the phenotype in each tissues using categorical dot plot.
+```{r}
+p1 <- plot_cell_categories(spe_object = spiat_sample1,
+                     categories_of_interest = unique(spiat_sample1$Phenotype),
+                     colour_vector = colour_pal,
+                     feature_colname = "Phenotype") +
+  #scale_color_manual(values = metadata(spiat_sample1)$color_vectors$phenotype) +
+  ggtitle("")
+p1
+
+#ggsave("Tissue_visualize_patient4.jpeg", path = "/Users/henzhwang/Desktop/", 
+#       width = 9, height = 7)
+```
+
+
+## Basic Analysis
+
+We want to performing some basic analyses on the image.
+
+### Cell precentage
+
+We obtain the number and proportion of each cell type and visualize them.
+```{r}
+p_cells_12 <- calculate_cell_proportions(spe_object = spiat_sample1,
+                           reference_celltypes = NULL,
+                           celltypes_to_exclude = NULL,
+                           feature_colname = "Phenotype",
+                           plot.image = FALSE)
+
+cell_prop_p12 <- (p_cells_12
+  |> dplyr::mutate(Cell_type = forcats::fct_reorder(Cell_type, Percentage))
+  |> ggplot2::ggplot() 
+  + geom_bar(aes(x = Cell_type, y = Percentage),
+             stat = "identity", width = 0.7)
+  + coord_flip()
+  + xlab("Cell Type") + ylab("Percentage")
+  #+ scale_x_discrete(guide = guide_axis(angle = 45))
+  + theme(text = element_text(size = 18)) 
+  + ggtitle("Patient 12")
+  + theme_bw()
+)
+```
+
+We also want to plot the cell proportion as bar plots.
+
+```{r}
+plot_cell_percentages(cell_proportions = p_cells,
+                      cells_to_exclude = NULL,
+                      cellprop_colname = "Proportion_name")
+```
+We can separte them as different compartment such as immune, non immune, and other...
+
+However, these plots seem to be a little bit chaos. We would like them be visualized in their comartment.
+
+#### Immune Compartment
+
+Cell percentage
+```{r}
+p_immune <- calculate_cell_proportions(spe_object = spiat_sample1,
+                           reference_celltypes = NULL,
+                           celltypes_to_exclude = c(nonimmune_cells, tumor_cells),
+                           feature_colname = "Phenotype",
+                           plot.image = TRUE)
+
+p_immune
+```
+
+Cell proportion
+```{r}
+plot_cell_percentages(cell_proportions = p_immune,
+                      cells_to_exclude = NULL,
+                      cellprop_colname = "Proportion_name")
+```
+
+
+#### Non-Immune Compartment
+
+Cell percentage
+```{r}
+p_nonimmune <- calculate_cell_proportions(spe_object = spiat_sample1,
+                           reference_celltypes = NULL,
+                           celltypes_to_exclude = c(immune_cells, tumor_cells),
+                           feature_colname = "Phenotype",
+                           plot.image = TRUE)
+
+p_nonimmune
+```
+Cell proportion barplot
+```{r}
+plot_cell_percentages(cell_proportions = p_nonimmune,
+                      cells_to_exclude = NULL,
+                      cellprop_colname = "Proportion_name")
+```
+
+
+
+### Cell distance
+
+We want to calculate the pairwise distances between two cell types(cell type A and cell type B) using violet plot.
+```{r}
+distance <- calculate_pairwise_distances_between_celltypes(
+  spe_object = spiat_sample1,
+  cell_types_of_interest = c(nonimmune_cells, tumor_cells),
+  feature_colname = "Phenotype")
+```
+
+```{r}
+plot_cell_distances_violin(distance)
+```
+
+
+We also calculate the summary statistics for the distance between each combinations of cell types.
+```{r}
+summary_distance <- calculate_summary_distances_between_celltypes(distance)
+summary_distance
+```
+
+Interpretaion of the above summry would be "the average pairwise distance between cells of B and cells of CD4 T are 642.958". 
+
+```{r}
+plot_distance_heatmap(phenotype_distances_result = summary_distance,
+                      metric = "mean")
+```
+
+
+### Minimum cell distance
+
+Different than the pairwise distance where it calculates all cell types of interest, here only identify distance to the cloest cell of type B to each of the cell of type A.
+```{r}
+min_dist <- calculate_minimum_distances_between_celltypes(
+  spe_object = spiat_sample1,
+  cell_types_of_interest = c(nonimmune_cells, tumor_cells),
+  feature_colname = "Phenotype")
+```
+
+Visualize them with violin plot
+```{r}
+plot_cell_distances_violin(min_dist)
+```
+
+
+```{r}
+sum_min_dist <- calculate_summary_distances_between_celltypes(min_dist)
+sum_min_dist
+```
+
+Interpretaion of the above summry would be "the average minimum distance between cells of B and cells of CD4 T are 89.539". 
+
+Plot heatmap.
+```{r}
+plot_distance_heatmap(phenotype_distances_result = sum_min_dist,
+                      metric = "mean")
+```
+
+
+
+
+## Cell colocalisation
+
+We also want to qualify cell colocalisation, where it refers to how much two cell types are colocalisating and thus potentially interacting. Cell colocalisation metrics allow capturing a dominant spatial pattern in an image.
+
+
+### Cells in Neibourhood
+
+Here, we calculate the avereage percentage of cells of one target cell type with a radius of a reference cell type.
+```{r}
+average_percentage_of_cells_within_radius(spe_object = spiat_sample1,
+                                          target_celltype = "CD4 T",
+                                          reference_celltype = "B",
+                                          feature_colname = "Phenotype")
+```
+
+
+We can also calculate the average intensity of the target_marker within a radius from the cell positive for the reference marker. (Note that it pools all cells with the target marker that are within the specific radius of any reference cell.)
+```{r}
+average_marker_intensity_within_radius(spe_object = spiat_sample1,
+                                       target_marker = "CD4",
+                                       reference_marker = "CD8",
+                                       radius = 30)
+```
+
+We can also plot a line graph showing the intensity levels at each specified radius.
+```{r}
+plot_average_intensity(spe_object = spiat_sample1,
+                       target_marker = "CD4",
+                       reference_marker = "CD8",
+                       radii = c(15, 25, 35, 45, 55, 70, 85, 100))
+```
+
+
+
+### Mixing Score and Normalised Mixing Score
+
+The score was originally defined as the number of immune-tumor interactions divided by the number of immune-immune interactions from Keren et al. in 2018. 
+  - This mixing score is defined as the number of target-reference interactions/number of reference-reference interactions within a specified radius. The higher the score the greater the mixing of the two cell types. 
+  - The normalised score is normalised for the number of target and reference cells in the image.
+```{r}
+mixing_score_summary(spe_object = spiat_sample1,
+                     target_celltype = "B",
+                     reference_celltype = "CD4 T",
+                     feature_colname = "Phenotype",
+                     radius = 20)
+```
+
+
+### Cross K functions
+
+Cross K function calculates the number of target cell types across a range of radii from a reference cell type, and compares the behaviour of the input image with an image of randomly distributed points using a Poisson point process. There are four patterns,
+
+  - The red line and black line are close to each other, meaning the two types of points are randomly independently distributed.
+  - The red line is under the black line, with a large difference in the middle of the plot, meaning the points are mixed and split into clusters.
+  - With the increase of radius, the black line diverges further from the red line, meaning that there is one mixed cluster of two types of points.
+  - The red line is above the black line, meaning that the two types of points form separated clusters.
+  
+```{r}
+df_cross <- calculate_cross_functions(spe_object = spiat_sample1,
+                                      method = "Kcross",
+                                      cell_types_of_interest = c("B", "CD4 T"),
+                                      feature_colname = "Phenotype",
+                                      dist = 100)
+```
+  
+The above pattern is similar to the first patteren listed, which means that cell type B and cell type CD4 T are randonmly independently distributed.
+
+We also want to calculate the area under the curve(AUC) of the cross-K function, to identidy the two cell types of cells whether:
+
+  - negative values: separate clusters
+  - positive values: mixing of cell types
+  
+```{r}
+AUC_of_cross_function(df.cross = df_cross)
+```
+
+Thus, the AUC score is close to zero that the two types of cells either do not have a relationship or they form a ring surrounding a cluster.
+
+
+### Cross-K interaction
+
+Details of such methodologies please see SPIAT vignettes.
+```{r}
+crossing_of_crossK(df.cross = df_cross)
+```
+
+The result shows that the crossing happens at 80% of the specified distance (100) of the cross K function, which is very close to the edge of the tumour cluster. This means that the crossing is not due to the randomness in cell distribution, nor due to two close located immune and tumour clusters. This result aligns with the observation that there is an immune ring surrounding the tumour cluster.
+
+
+
+
+## Spatial heterogeneity
+
+We want to measure the spatial heterogeneity of patterns as dominant spatial patterns are unlikely to be distributed evenly in a tissue. 
+
+
+### Localised Entropy
+
+Entropy in spatial analysis refers to the balance in the number of cells of distinct populations. An entropy score can be obtained for an entire image, but does not provide any information of the image.
+```{r}
+calculate_entropy(spe_object = spiat_sample1,
+                  cell_types_of_interest = unique(spiat_sample1$Phenotype),
+                  feature_colname = "Phenotype")
+```
+
+
+### Fishnet Grid
+
+One approach to calculate localised metric is to split the image into fishnet grid squares. For each grid square, grid_metrics() calculates the metric for that square and visualise the raster image. Users can choose any metric as the localised metric.
+```{r}
+grid <- grid_metrics(spe_object = spiat_sample1,
+                     FUN = calculate_entropy,
+                     cell_types_of_interest = unique(spiat_sample1$Phenotype),
+                     feature_colname = "Phenotype",
+                     n_split = 20)
+```
+
+
+
+## Characterize Tissue Structure
+
+We want to focus on understanding the spatial distribution of an certain cell type of cell populations realtive to tissue regions. We will perform a analysis to characterize the immune population in tumor structure that can generalised to other tissue and cell types.
+
+
+### Determine if not a clear tumor margin
+
+The following function quantify the quality of the 'margin' by calculate the ratio of tumor bordering cells to tumour cells(R-BT). This ratio is high when there is a disproportional high number of tumour margin cells compared to internal tumour cells.
+
+```{r}
+R_BC(spe_object = spiat_sample1,
+     cell_type_of_interest = "Other",
+     feature_colname = "Phenotype")
+```
+
+The result is 0.10899. This low value means there are relatively low number of bordering cells compared to total tumour cells, meaning that this image has clear tumour margins.
+
+
+
+### Automatic identification of the tumor margin
+
+We now want to identify the bordering cells.
+
+```{r}
+formatted_border <- identify_bordering_cells(spe_object = spiat_sample1,
+                                             reference_cell = "Other",
+                                             feature_colname = "Phenotype")
+```
+
+
+We now want to get the number of cell type clusters
+```{r}
+attr(formatted_border, "n_of_clusters")
+```
+
+There are 2 B cell clusters in the image.
+
+
+### Classfication of cells based on locations
+
+We want to define our locations relative to the margin based on distances:
+
+  - **Internal Margin**: bordering the margin, inside the tumour area
+  - **External Margin**: bordering the margin, surrounding the tumour area
+  - **Inside**: Inside the tumor area
+  - **Outside**: Outside the tumor area
+  
+We now calculate the distance of cells to the tumor margin.
+```{r}
+formatted_distance <- calculate_distance_to_margin(formatted_border)
+```
+
+
+Next, we classify cell based on their location. As a distance cutoff, we use a distance of 5 cells from the tumour margin. The function first calculates the average minimum distance between all pairs of nearest cells and then multiples this number by 5.
+
+```{r}
+immune_cells <- immune_names[unique(spiat_sample1$Phenotype) %in% immune_names]
+immune_cells
+
+formatted_structure_12 <- define_structure(spe_object = formatted_distance,
+                                        cell_types_of_interest = immune_cells,
+                                        feature_colname = "Phenotype",
+                                        n_margin_layers = 5)
+
+categories <- unique(formatted_structure$Structure)
+```
+
+We now plot and color these structure categories.
+```{r}
+tis_structure_p12 <- plot_cell_categories(spe_object = formatted_structure_12,
+                     feature_colname = "Structure")
+
+#ggsave("Tissue_structure_patient4.jpeg", path = "/Users/henzhwang/Desktop/",
+#       width = 9, height = 7)
+```
+
+```{r}
+ggpubr::ggarrange(
+  tis_structure_p4, tis_structure_p12,
+  labels = c("A", "B"),
+  widths = 10, heights = 5,
+  ncol = 2
+)
+
+ggsave(filename = "tiss_structure_plots.eps", device = "eps",
+       width = 14, height = 6,
+        path = here::here("Output", "Figures"))
+```
+
+
+We also calculate the proportions of immune cells in each of the locations.
+```{r}
+immune_proportions <- calculate_proportions_of_cells_in_structure(spe_object = formatted_structure,
+                                                                  cell_types_of_interest = immune_names,
+                                                                  feature_colname = "Phenotype")
+immune_proportions
+```
+
+Lastly, we calculate summaries of distance of immune cells in the tumor structure.
+```{r}
+immune_distance <- calculate_summary_distances_of_cells_to_borders(spe_object = formatted_structure,
+                                                                   cell_types_of_interest = immune_names,
+                                                                   feature_colname = "Phenotype")
+immune_distance
+```
+
+
+## Celluar neighbourhood
+
+A celluar neighbourhood is defined as a group of cells that clusters together, where it can be cells of a single class and it can be a cells of mixture of cell types.
+
+We want to identifies the celluar neighbourhood, where there are three methods of Hierarchical Clustering, dbsacan, and phenograph.
+
+To move forward with hierarchical clustering algorithm, we would first compute the average minimum ditance between cells in the tissue.
+```{r}
+average_minimum_distance(spe_object = spiat_sample1)
+```
+
+We then identify the neighbourhood with a radius of 50, and with a minimum neighbourhood size of 100.
+
+```{r}
+clusters <- identify_neighborhoods(spe_object = spiat_sample1,
+                                   method = "hierarchical",
+                                   cell_types_of_interest = immune_names,
+                                   radius = 50,
+                                   min_neighborhood_size = 20,
+                                   feature_colname = "Phenotype",
+                                   no_pheno = NULL)
+```
+
+
+We can also visualize the cell composition of the neighbourhood by obtaining the percentages of cells with a specific phenotype within each neighbourhood and the number of cells in the neighbourhood.
+
+```{r}
+neighborhoods_vis <- composition_of_neighborhoods(spe_object = clusters, feature_colname = "Phenotype")
+neighborhoods_vis <- neighborhoods_vis[neighborhoods_vis$Total_number_of_cells >= 5, ]
+```
+
+
+We then plot the composition of the neighbourhood and show as a heatmap.
+```{r}
+plot_composition_heatmap(composition = neighborhoods_vis,
+                         feature_colname = "Phenotype")
+```
+
+
+### Average Nearest Neighbourhood Index
+
+We can use ANNI to test the presence of neighbourhood, output whether there is a clear neighbourhood (clustered) or unclear neighbourhood (random/dispersed).
+
+```{r}
+average_nearest_neighbor_index(spe_object = clusters,
+                               reference_celltypes = c("Cluster_4"),
+                               feature_colname = "Neighborhood", p_val = 0.05)
+```
+
+
+```{r}
+average_nearest_neighbor_index(spe_object = clusters,
+                               reference_celltypes = immune_names,
+                               feature_colname = "Phenotype", p_val = 0.05)
+```

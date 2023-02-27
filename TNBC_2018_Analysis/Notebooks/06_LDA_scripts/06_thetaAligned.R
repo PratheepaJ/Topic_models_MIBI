@@ -11,8 +11,18 @@
 thetaAligned <- function(theta,
                          K,
                          aligned,
-                         iterUse = 1000,
-                         chain = 4){
+                         warm_up_iter = NULL,
+                         iter = 2000,
+                         chain = 2){
+  
+  
+  # determine the iteration used in posterior sampling (subtract warm up iterations)
+  if (is.null(warm_up_iter)) {
+    iterUse = iter / 2
+  } else {
+    iterUse = iter - warm_up_iter
+  }
+  
   # align topics between chains
   # switch samples and Topic dimension in array
   theta <- aperm(theta, c(1,3,2))

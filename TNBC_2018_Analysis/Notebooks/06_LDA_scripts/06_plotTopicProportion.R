@@ -21,14 +21,22 @@ plotTopicProportion <- function(
   K,
   col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
   chain = 4,
-  iterUse = 1000,
+  warm_up_iter = NULL,
+  iter = 2000,
   SampleID_name = "sample_id"
   #design = ~pna
 ){
   
   Sample <- Topic <- pna <- topic.dis <- NULL
   median.topic.dis <- median <- NULL
-
+  
+  
+  # determine the iteration used in posterior sampling (subtract warm up iterations)
+  if (is.null(warm_up_iter)) {
+    iterUse = iter / 2
+  } else {
+    iterUse = iter - warm_up_iter
+  }
 
 
   dimnames(theta_aligned)[[2]] <- unique(spe$sample_id)
@@ -57,7 +65,7 @@ plotTopicProportion <- function(
   theta_all <- dplyr::left_join(
     theta_all,
     sam,
-    by =c("Sample" = SampleID_name)
+    by = c("Sample" = SampleID_name)
   )
 
   theta_all$Chain <- factor(theta_all$Chain)
@@ -86,32 +94,32 @@ plotTopicProportion <- function(
 
   p <- ggplot2::ggplot(
     theta_summary,
-    ggplot2::aes(x= Sample,
-        y = Topic)
+    ggplot2::aes(
+      x= Sample,
+      y = Topic)
   )
   
-  p <- p+
+  p <- p +
     ggplot2::geom_tile(
-      ggplot2::aes(alpha = median.topic.dis)
+      ggplot2::aes(fill = median.topic.dis)
+      #ggplot2::aes(alpha = median.topic.dis)
     ) +
     # ggplot2::facet_grid(
     #   .~Sample,
     #   scale = "free"
     # ) +
     ggplot2::xlab("Sample") +
-    ggplot2::scale_fill_manual(
-      name = "Median Topic \ndistribution",
-      values = c("gray98", "dodgerblue")
-    ) +
+    ggplot2::scale_fill_gradientn(name = "Median Topic \ndistribution",
+                                  colors = c("gray98", "#E69F00")) + 
     # ggplot2::scale_fill_gradientn(
     #   name = "Median Topic \ndistribution",
     #   colours = c("#999999", "#0072B2")
     # ) +
-    ggplot2::scale_alpha(
-      name = "Median Topic \ndistribution"
-    ) +
+    # ggplot2::scale_alpha(
+    #   name = "Median Topic \ndistribution"
+    # ) +
     ggplot2::theme_classic(
-      base_size = 20
+      base_size = 16
     ) +
     ggplot2::theme(
       plot.title = ggplot2::element_text(hjust = 0.5),

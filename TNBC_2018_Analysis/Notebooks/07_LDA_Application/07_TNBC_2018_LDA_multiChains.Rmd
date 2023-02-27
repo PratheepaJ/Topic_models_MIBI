@@ -92,7 +92,7 @@ source(here::here("Notebooks",
                   "06_LDA_scripts", "06_get_lda_result.R"))
 
 samples <- get_lda_result(K = 5, alpha = 0.8, gamma = 0.8,
-                          dtm = dtm, iter = 2000, chains = 2,
+                          dtm = dtm, iter = 2000, chains = 4,
                           file_fold = "07_LDA_multiChains", save_file = TRUE)
 ```
 
@@ -102,7 +102,7 @@ source(here::here("Notebooks",
                   "06_LDA_scripts", "06_load_lda_result.R"))
 
 file_fold = "07_LDA_multiChains"
-lda_file = "JABES_Endo_all_K_3_ite_2000.RData"
+lda_file = "JABES_Endo_all_K_5_ite_2000.RData"
 
 samples <- load_lda_result(
   file = here::here("Output", "Data", 
@@ -110,16 +110,26 @@ samples <- load_lda_result(
 )
 ```
 
+```{r}
+K = 5
+iter = 2000
+chain = 4
+stan.fit <- samples[[1]]
+samples <- samples[[2]]
+```
 
 ## Topics Analysis
 
 ### Theta
 
-We want to extract parameters $\theta$ and $B = \left[\beta_{1}, \cdots, \beta_{K} \right]^{T}$. 
+We want to extract estimation of parameters $\theta$ and $B = \left[\beta_{1}, \cdots, \beta_{K} \right]^{T}$. 
 
-The dimension of $\theta$ is k x 39 x 3, where k is the number of iterations with 39 patients and 3 topics. Each value is the probability of each patient in each topic in each iteration. Each value is the probability in each iteration of each topic of each tissue sample.
+The dimension of $\theta$ is N x D x K, where k is the number of iterations with 39 patients and 3 topics. Each value is the probability of each patient in each topic in each iteration. Each value is the probability in each iteration of each topic of each tissue sample.
 
-We are also interested in what cell types are in each topic, which is the $\beta$ estimation. The expected dimension is k x 3 x 16, where $k$ is the number of iterations for 3 topics and 16 cell types. Each value is the probability in each iteration of each cell type in each topic.
+We are also interested in what cell types are in each topic, which is the $\beta$ estimation. The expected dimension is N x K x T, where $k$ is the number of iterations for 3 topics and 16 cell types. Each value is the probability in each iteration of each cell type in each topic.
+
+Each value is the $k$ topic proportion in $d$ sample in $n$ iteration.
+Each value is the $t$ term proportion in $k$ topic in $n$ iteration.
 
 ```{r parameter estimation}
 # theta estimation
@@ -143,9 +153,9 @@ source(here::here("Notebooks",
 aligned_matrix <- alignmentMatrix(
   theta = theta,
   spe = spe,
-  K = 3,
-  iterUse = 2000,
-  chain = 2,
+  K = K,
+  iter = iter,
+  chain = chain,
   #cor_method = "cosine",
   SampleID_name = "sample_id"
 )
@@ -163,10 +173,10 @@ source(here::here("Notebooks",
 
 theta_aligned <- thetaAligned(
   theta = theta, 
-  K = 3, 
+  K = K, 
   aligned = aligned_matrix, 
-  iterUse = 1000, 
-  chain = 2
+  iter = iter,
+  chain = chain,
   )
 ```
 
@@ -181,10 +191,10 @@ source(here::here("Notebooks",
 
 beta_aligned <- betaAligned(
   beta = beta, 
-  K = 3, 
+  K = K, 
   aligned = aligned_matrix, 
-  iterUse = 1000, 
-  chain = 2
+  iter = iter,
+  chain = chain,
   ) 
 ```
 
@@ -202,12 +212,15 @@ source(here::here("Notebooks",
 p_topicProp <- plotTopicProportion(
   spe = spe,
   theta_aligned = theta_aligned,
-  K = 3,
-  chain = 2,
-  iterUse = 1000,
+  K = K,
+  iter = iter,
+  chain = chain,
   SampleID_name = "sample_id"
 )
 p_topicProp
+
+#ggsave(filename = "Topic_Prop_5.png", path="/Users/henzhwang/Desktop/",
+#       width = 15, height = 10)
 ```
 
 
@@ -220,14 +233,60 @@ source(here::here("Notebooks",
 
 p_cellTypeDist <- plotCellTypeDistribution(
   spe = spe,
-  K = 3,
+  K = K,
   beta_aligned = beta_aligned,
   col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h")
 )
 
 p_cellTypeDist
+#ggsave(filename = "cellType_dist_5.png", path="/Users/henzhwang/Desktop/",
+#       width = 15, height = 10)
 ```
 
+```{r}
+# p <- ggpubr::ggarrange(
+#   p_topicProp, p_cellTypeDist,
+#   labels = "AUTO",
+#   widths = 10, heights = c(4, 5),
+#   nrow = 2
+#   #common.legend = TRUE, lengend = "top"
+# )
+# 
+# ggsave(filename = "topic_cellType_prop_plots.eps", device = "eps",
+#        width = 12, height = 9,
+#        path = here::here("Output", "Figures"))
+
+```
+
+
+## Diagnostic plot
+
+Perform computation of effective sample size for each parameter
+```{r}
+source(here::here("Notebooks", 
+                  "06_LDA_scripts", "06_diagnosticsPlot.R"))
+
+p_diag_5_2000 <- diagnosticsPlot(
+  theta_aligned = theta_aligned,
+  beta_aligned = beta_aligned,
+  iter = iter,
+  chain = chain,
+) 
+```
+
+```{r}
+# bulk effective sample size
+p_diag_5_2000[[1]]
+# ggsave(filename = "ESS_5.png", path="/Users/henzhwang/Desktop/",
+#        width = 8, height = 5)
+```
+
+```{r}
+# rhat plots
+p_diag_5_2000[[2]]
+#ggsave(filename = "rhat_5.png", path="/Users/henzhwang/Desktop/",
+#      width = 10, height = 6)
+```
 
 
 ## Model Asseessement
@@ -235,10 +294,39 @@ p_cellTypeDist
 We want to perform goodness of fit test using the posterior estimates and observed data.
 
 ```{r}
+source(here::here("Notebooks", 
+                  "06_LDA_scripts", "06_modelAssessment.R"))
+#cellTypeIndexToPlot = c(2, 3, 5, 12, 15)
 
+p_model_assessment <- modelAssessment(dtm = dtm,
+                samples = samples,
+                warm_up_iter = NULL,
+                iter = iter,
+                cellTypeIndexToPlot = c(1:16)
+                )
+p_model_assessment
 ```
 
 
+```{r}
+# ggpubr::ggarrange(
+#   ggpubr::ggarrange(
+#     p_diag_5_2000[[1]], p_diag_5_2000[[2]],
+#     ncol = 2,
+#     labels = c("A", "B")
+#   ),
+#   ggpubr::ggarrange(
+#     p_model_assessment,
+#     labels = c("C")
+#   ),
+#   heights = c(3, 5),
+#   nrow = 2
+# )
+# 
+# ggsave(filename = "diag_assess_plots.eps", device = "eps",
+#        width = 10, height = 6,
+#        path = here::here("Output", "Figures"))
+```
 
 
 
@@ -263,8 +351,9 @@ TNBC_2018_LDA_3_2000 <- LDA_analysis(
   alpha = 0.8,
   gamma = 0.8,
   iter = 2000,
-  chain = 2,
+  chain = 4,
   col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
+  col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
   stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
   load_file = TRUE,
   save_file = FALSE,
@@ -283,8 +372,9 @@ TNBC_2018_LDA_5_2000 <- LDA_analysis(
   alpha = 0.8,
   gamma = 0.8,
   iter = 2000,
-  chain = 2,
+  chain = 4,
   col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
+  col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
   stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
   load_file = TRUE,
   save_file = FALSE,
@@ -294,16 +384,17 @@ TNBC_2018_LDA_5_2000 <- LDA_analysis(
 ```
 
 ```{r}
-TNBC_2018_LDA_8_2000 <- LDA_analysis(
+TNBC_2018_LDA_7_2000 <- LDA_analysis(
   spe = spe,
   SampleID_name = "sample_id",
   cellType_name = "mm",
-  K = 8,
+  K = 7,
   alpha = 0.8,
   gamma = 0.8,
   iter = 2000,
-  chain = 2,
+  chain = 4,
   col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
+  col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
   stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
   load_file = TRUE, # load_file = FALSE
   save_file = FALSE, # save_file = TRUE
@@ -316,15 +407,15 @@ TNBC_2018_LDA_8_2000 <- LDA_analysis(
 
 ```{r fig.width=20, fig.height=15}
 # topic proportions plots 
-p_topic_prop_3_2000 <- TNBC_2018_LDA_3_2000[[8]]
-p_topic_prop_5_2000 <- TNBC_2018_LDA_5_2000[[8]]
-p_topic_prop_8_2000 <- TNBC_2018_LDA_8_2000[[8]]
+p_topic_prop_3_2000 <- TNBC_2018_LDA_3_2000[[9]]
+p_topic_prop_5_2000 <- TNBC_2018_LDA_5_2000[[9]]
+p_topic_prop_7_2000 <- TNBC_2018_LDA_7_2000[[9]]
 
 # plot list
 topic_prop_plot_list <- list(
   p_topic_prop_3_2000 + remove_x,
   p_topic_prop_5_2000 + remove_x,
-  p_topic_prop_8_2000 
+  p_topic_prop_7_2000 
 )
 
 # plot
@@ -340,16 +431,16 @@ ggpubr::ggarrange(
 # p_topic_prop_3_2000
 # p_topic_prop_5_2000
 # p_topic_prop_8_2000
-#ggsave(filename = "Topics.png", path="/Users/henzhwang/Desktop/",
-#       width = 20, height = 18)
+# ggsave(filename = "Topics.png", path="/Users/henzhwang/Desktop/",
+#        width = 18, height = 15)
 ```
 
 
 ```{r}
 # cell type proportions plots
-p_cellType_prop_3_2000 <- TNBC_2018_LDA_3_2000[[9]]
-p_cellType_prop_5_2000 <- TNBC_2018_LDA_5_2000[[9]]
-p_cellType_prop_8_2000 <- TNBC_2018_LDA_8_2000[[9]]
+p_cellType_prop_3_2000 <- TNBC_2018_LDA_3_2000[[10]]
+p_cellType_prop_5_2000 <- TNBC_2018_LDA_5_2000[[10]]
+p_cellType_prop_7_2000 <- TNBC_2018_LDA_7_2000[[10]]
 ```
 
 
@@ -358,14 +449,14 @@ p_cellType_prop_8_2000 <- TNBC_2018_LDA_8_2000[[9]]
 cellType_prop_plot_list <- list(
   p_cellType_prop_3_2000,
   p_cellType_prop_5_2000 + remove_y,
-  p_cellType_prop_8_2000 + remove_y
+  p_cellType_prop_7_2000 + remove_y
 )
 
 # plot
 ggpubr::ggarrange(
   plotlist = cellType_prop_plot_list,
   labels = c("A", "B", "C"),
-  common.legend = TRUE, legend = "right",
+  common.legend = TRUE, legend = "top",
   ncol = 3, nrow = 1
 )
 
@@ -376,7 +467,7 @@ ggpubr::ggarrange(
 # p_cellType_prop_5_2000
 # p_cellType_prop_8_2000
 
-#ggsave(filename = "cellType.png", path="/Users/henzhwang/Desktop/",
-#       width = 15, height = 8)
+# ggsave(filename = "cellType.png", path="/Users/henzhwang/Desktop/",
+#       width = 15, height = 12)
 ```
 

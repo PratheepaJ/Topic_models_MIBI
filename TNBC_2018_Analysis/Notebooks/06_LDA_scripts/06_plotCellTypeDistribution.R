@@ -78,8 +78,8 @@ plotCellTypeDistribution <- function(
     ggplot2::ylab("Cell Type") +
     ggplot2::xlab("Topic") +
     ggplot2::scale_fill_gradientn(name = "Median Cell Type \ndistribution",
-                         colours = c("gray98", "dodgerblue")) +
-    ggplot2::theme_classic(base_size = 18) +
+                         colors = c("gray98", "dodgerblue")) +
+    ggplot2::theme_classic(base_size = 16) +
     ggplot2::theme(plot.title = element_text(hjust = 0.5))
   
   return(p)

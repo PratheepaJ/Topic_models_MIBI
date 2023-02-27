@@ -49,6 +49,78 @@ Read in the MATLAB revised TNBC output CSV files.
 TNBC <- readr::read_csv(here::here("Data", "MIBI-TNBC_count_output.csv"))
 ```
 
+## Sample-CellType Histogram and Barplot
+
+We want to plot histogram and bar plot for sample and cell types. We first want to plot the bar plot of total count of each cell type count in all samples.
+
+```{r}
+CellType_count_all <- (
+  dplyr:: count(TNBC, mm) 
+  |> dplyr::rename(count = n) 
+  |> dplyr::mutate(mm = forcats::fct_reorder(mm, count))
+  #|> dplyr::arrange(desc(count)) 
+  |> ggplot2::ggplot(aes(x = mm, y = count)) 
+  + geom_bar(stat = "identity", width = 0.7
+             ,fill="#f68060") 
+             #alpha=.6, width=.5)
+  + coord_flip()
+  + xlab("Cell Type") + ylab("Count")
+  + theme(text = element_text(size = 18)) 
+  + ggtitle("")
+  + theme_bw()
+)
+
+# ggsave(filename = "CellType_count_all.eps", device = "eps",
+#        plot = CellType_count_all,
+#        width = 8, height = 6,
+#        path = here::here("Output", "Figures"))
+```
+
+Next, we want to plot the unqieu cell type count in each sample
+
+
+```{r}
+sample_cellType <- (
+  TNBC
+  |> dplyr::group_by(sample_id)
+  |> dplyr::summarise(unique_mmCount = length(unique(mm)))
+  |> dplyr::mutate(sample_id = factor(sample_id))
+  #|> dplyr::mutate(sample_id = factor(paste0("Sample_", sample_id)))
+  #|> dplyr::mutate(sample_id = forcats::fct_reorder(sample_id, unique_mmCount))
+  |> ggplot2::ggplot(aes(x = sample_id, y = unique_mmCount))
+  + geom_bar(stat = "identity", width = 0.7
+             ,fill="#f68060") 
+             #alpha=.8, width=.7)
+  #+ coord_flip()
+  + xlab("Sample Identity") + ylab("Unique Cell Type Coount")
+  + ggtitle("")
+  + theme(text = element_text(size = 18)) 
+  + scale_x_discrete(guide = guide_axis(angle = 90))
+  + theme_bw()
+)
+
+# ggsave(filename = "sample_cellType_plot.eps",
+#        plot = sample_cellType,
+#        width = 8, height = 6,
+#        path = here::here("Output", "Figures"))
+```
+
+
+We now want to combine two plots together
+
+```{r}
+
+arrange <- ggpubr::ggarrange(
+   CellType_count_all, sample_cellType,
+   labels = c("A", "B"),
+   widths = 10, heights = 6) +
+  theme(text = element_text(size = 18)) 
+
+# ggsave(filename = "sample_cellType_plots.eps", plot = arrange, device = "eps",
+#        width = 10, height = 5,
+#        path = here::here("Output", "Figures"))
+```
+
 
 
 ## Phenotype-Sample distribution
@@ -126,7 +198,7 @@ TNBC %>%
     scale_fill_manual(values = brewer.pal(11, "RdBu"), na.value = "azure4") + 
   
     # theme
-    theme_grey(base_size = 10)+
+    theme_grey(base_size = 14)+
     theme(legend.position = "right", legend.direction = "vertical",
         legend.title = element_text(colour = "black", size = 6),
         legend.margin = margin(grid::unit(0, "cm")),
@@ -143,6 +215,8 @@ TNBC %>%
      )+
     #scale_x_discrete(guide = guide_axis(n.dodge = 2)) # separate x label into two levels
     scale_x_discrete(guide = guide_axis(angle = 45))  # rotating x label angle
+
+ggsave("Phenotype_Sampling.jpeg", path = "/Users/henzhwang/Desktop/", width = 10, height = 7.5)
 ```
 
 

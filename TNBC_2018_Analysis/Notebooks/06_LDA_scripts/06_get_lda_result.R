@@ -87,5 +87,6 @@ get_lda_result <- function(K,
     include = TRUE
   )
   
-  return(res)
+  return(list(stan.fit,
+              res))
 }
