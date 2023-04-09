@@ -1,0 +1,190 @@
+---
+title: "08_alto"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2023-02-27"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Library
+```{r library, warning=FALSE, message=FALSE}
+library(alto)
+library(dplyr)
+library(ggplot2)
+library(randomcoloR)
+library(SpatialExperiment)
+```
+
+
+## Dataset
+
+Load the TNBC SPE object.
+```{r dataset, warning=FALSE, message=FALSE}
+load(here::here("Output", "Data", "03_SPE", "03_TNBC_2018_spe.rds"))
+spe
+```
+
+
+
+### Document-Term Matrix
+
+We want to create the Document-Term matrix of the dataset where the rows are the sample identity and columns are the cell types fill with counts. The expected dimension of the DTM is 39 rows by 16 columns.
+
+```{r dtm}
+dtm <- table(spe$sample_id, spe$mm)
+dim_names <- dimnames(dtm)
+dim(dtm)
+```
+
+
+```{r}
+vm_data <- list()
+
+vm_data$counts <- dtm
+vm_data$cellType <- data.frame(cellType = colnames(dtm))
+vm_data$sample_id <- data.frame(sample_id = rownames(dtm))
+```
+
+
+
+
+```{r}
+lda_varying_params_lists <-  list()
+for (k in 1:16) {lda_varying_params_lists[[paste0("k",k)]] <- list(k = k)}
+
+lda_models  <- 
+  run_lda_models(
+    data = dtm,
+    lda_varying_params_lists = lda_varying_params_lists,
+    lda_fixed_params_list = list(method = "VEM"),
+    #dir = "microbiome_lda_models/",
+    reset = FALSE,
+    verbose = TRUE
+  )
+
+```
+
+```{r}
+aligned_topics_product <- 
+  align_topics(
+    models = lda_models,
+    method = "product") 
+
+aligned_topics_transport <- 
+  align_topics(
+    models = lda_models,
+    method = "transport") 
+```
+
+
+
+
+```{r}
+plot(aligned_topics_product)
+```
+
+
+```{r}
+plot(aligned_topics_transport)
+```
+
+
+```{r}
+compute_number_of_paths(aligned_topics_product) %>% 
+  plot_number_of_paths() + 
+  ggtitle("Method: product")
+```
+
+
+```{r}
+compute_number_of_paths(aligned_topics_transport) %>% 
+  plot_number_of_paths() + 
+  ggtitle("Method: transport")
+```
+
+
+```{r}
+aligned_topics_transport_5 <- align_topics(lda_models[1:5], method = "transport")
+plot(aligned_topics_transport_5, add_leaves = TRUE, label_topics = TRUE)
+```
+
+```{r}
+aligned_topics_transport_8 <- align_topics(lda_models[1:8], method = "transport")
+plot(aligned_topics_transport_8, add_leaves = TRUE, label_topics = TRUE)
+```
+
+
+```{r}
+aligned_topics_transport_12 <- align_topics(lda_models[1:12], method = "transport")
+plot(aligned_topics_transport_12, add_leaves = TRUE, label_topics = TRUE)
+```
+
+
+```{r}
+plot(aligned_topics_product, color_by = "coherence")
+```
+
+
+```{r}
+plot(aligned_topics_transport, color_by = "coherence")
+```
+
+
+
+```{r}
+plot(aligned_topics_product, color_by = "refinement")
+```
+
+
+
+```{r}
+plot(aligned_topics_transport, color_by = "refinement")
+```
+
+
+
+```{r}
+plot_beta(aligned_topics_product, models = c("k3", "k5", "k7","k12","k16"), threshold = 0.005)
+```
+
+
+
+```{r}
+plot_beta(aligned_topics_transport, models = c("k3", "k7","k12","k16"), threshold = 0.005)
+```
+
+
+
+```{r}
+plot_beta(aligned_topics_transport, 
+          models = c("k3", "k7","k12","k16"), 
+          threshold = 0.005, 
+          color_by = "coherence")
+```
+
+
+
+
+
+
+
+
+
+
+

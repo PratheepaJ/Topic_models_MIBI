@@ -600,7 +600,8 @@ We then identify the neighbourhood with a radius of 50, and with a minimum neigh
 ```{r}
 clusters <- identify_neighborhoods(spe_object = spiat_sample1,
                                    method = "hierarchical",
-                                   cell_types_of_interest = immune_names,
+                                   #cell_types_of_interest = immune_names,
+                                   cell_types_of_interest = c(tumor_names, immune_names, nonimmune_names),
                                    radius = 50,
                                    min_neighborhood_size = 20,
                                    feature_colname = "Phenotype",

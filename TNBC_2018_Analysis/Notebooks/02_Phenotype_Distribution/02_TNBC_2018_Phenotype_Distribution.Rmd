@@ -189,7 +189,7 @@ TNBC %>%
   
     # labels
     guides(fill=guide_legend(title = "Number of Cells \nin Each Sample"))+
-    labs(x = "Phenotype", y = " sample_id", title = "Phenotype-Sample Distribution of Triple Negative Breast Cancer")+
+    labs(x = "Cell Type", y = " Sample Identity", title = "Cell Type-Sample Distribution of Triple Negative Breast Cancer")+
     scale_y_discrete(expand = c(0, 0)) +
     scale_x_discrete(expand = c(0, 0)) +
     
@@ -200,18 +200,18 @@ TNBC %>%
     # theme
     theme_grey(base_size = 14)+
     theme(legend.position = "right", legend.direction = "vertical",
-        legend.title = element_text(colour = "black", size = 6),
+        legend.title = element_text(colour = "black", size = 10),
         legend.margin = margin(grid::unit(0, "cm")),
-        legend.text = element_text(colour = "grey40", size = 6, face = "bold"),
+        legend.text = element_text(colour = "grey40", size = 10, face = "bold"),
         legend.key.height = grid::unit(0.8, "cm"),
         legend.key.width = grid::unit(0.2, "cm"),
-        axis.text.x = element_text(size = 7, colour = "grey40"),
+        axis.text.x = element_text(size = 10, colour = "grey40"),
         axis.text.y = element_text(vjust = 0.2, colour = "grey40"),
         axis.ticks = element_line(linewidth = 0.4),
         plot.background = element_blank(),
         panel.border = element_blank(),
         plot.margin = margin(0.7, 0.4, 0.1, 0.2, "cm"),
-        plot.title = element_text(colour = "grey40", hjust = 0, size = 11, face = "bold")
+        plot.title = element_text(colour = "grey40", hjust = 0, size = 10, face = "bold")
      )+
     #scale_x_discrete(guide = guide_axis(n.dodge = 2)) # separate x label into two levels
     scale_x_discrete(guide = guide_axis(angle = 45))  # rotating x label angle

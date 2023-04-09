@@ -1,0 +1,339 @@
+---
+title: "09_Tessellation"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2023-02-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Library
+```{r library, warning=FALSE, message=FALSE}
+library(rstan)
+library(dplyr)
+library(EBImage)
+library(ggplot2)
+library(spatstat)
+library(randomcoloR)
+library(SpatialExperiment)
+```
+
+
+## Dataset
+
+Load the TNBC SPE object.
+```{r dataset, warning=FALSE, message=FALSE}
+load(here::here("Output", "Data", "03_SPE", "03_TNBC_2018_spe.rds"))
+spe
+```
+
+
+## Posterior Sampling
+
+Load posterior sampling results of 5 topics using 4 chains and 2000 iterations on the dataset.
+```{r}
+source(here::here("Notebooks", 
+                  "06_LDA_scripts", "06_LDA_analysis.R"))
+
+TNBC_2018_LDA_5_2000 <- LDA_analysis(
+  spe = spe,
+  SampleID_name = "sample_id",
+  cellType_name = "mm",
+  K = 5,
+  alpha = 0.8,
+  gamma = 0.8,
+  iter = 2000,
+  chain = 4,
+  col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
+  col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
+  stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
+  load_file = TRUE,
+  save_file = FALSE,
+  file_default = TRUE,
+  file_fold = "07_LDA_multiChains"
+)
+```
+
+## Cell Type Proportion in each Topics
+
+```{r}
+beta_hat <- TNBC_2018_LDA_5_2000$beta_aligned
+dim(beta_hat)
+dimnames(beta_hat)
+```
+
+```{r}
+apply(data.frame(beta_hat[, 1, ]), 2, median)
+```
+
+
+```{r}
+cellType_propInPercentage <- function(beta_hat) {
+  
+  K <- dim(beta_hat)[2]
+  cellType_uni <- dim(beta_hat)[3]
+  
+  cellType_prop_df <- (
+    apply(data.frame(beta_hat[, 1, ]), 2, median)
+    |> as.data.frame()
+  )
+  
+  for (i in (2:K)){
+    cellType_prop <- (
+      apply(data.frame(beta_hat[, i, ]), 2, median)
+    |> as.data.frame()
+    )
+    cellType_prop_df <- cbind(cellType_prop_df, cellType_prop)
+  }
+  
+  colnames(cellType_prop_df) <- dimnames(beta_hat)[[2]]
+  rownames(cellType_prop_df) <- NULL
+  cellType_prop_df <- cbind("cell_type" = dimnames(beta_hat)[[3]],
+                            cellType_prop_df)
+  
+  #cellType_prop_df[ , sort(names(cellType_prop_df))]
+  
+  return(cellType_prop_df)
+}
+```
+
+```{r}
+#abind::abind(beta_chain[[2]],beta_aligned,along = 1) |> View()
+```
+
+
+```{r}
+cellType_propInPercentage(beta_hat)
+```
+
+
+## Spatial Compartment Dataframe
+
+We want to construct a spatial compartment dataframe, where the rows are the cell identity. The columns of the dataframe will contain the cell type of the corresponding cell identity along with the proportion of that cell type in each topics for the number of topics $K$.
+
+```{r}
+spatial_compartment <- function(spe, beta_hat, cellTypeCol = "mm") {
+  
+  sample_id <- spe$sample_id
+  
+  cell_ct <- cbind("cell_id" = dimnames(assay(spe))[[2]], 
+                   "cell_type" = spe$mm) |> data.frame()
+  
+  ct_prop <- cellType_propInPercentage(beta_hat)
+  
+  ## 1 for tumor cells, 0 for immune and non-immune cells
+  tumor_not <- factor(ifelse(cell_ct == "Other", 1, 0)[, 2])
+  #print(tumor_not)
+  
+  result <- cbind(sample_id, 
+                  left_join(cell_ct, ct_prop, by = "cell_type"),
+                  tumor_not
+  )
+  
+  return(result)
+}
+```
+
+```{r}
+spa_compa <- spatial_compartment(spe, beta_hat, cellTypeCol = "mm")
+spa_compa
+```
+
+
+
+## Patient 1
+```{r}
+spe_p1 <- spe[ ,spe$sample_id == "Sample_01"]
+centroid_x_p1 <- spatialCoords(spe_p1)[, 1]
+centroid_y_p1 <- spatialCoords(spe_p1)[, 2]
+
+#spa_compa_p1 <- spa_compa[spa_compa$sample_id == "Sample_01",]
+spa_compa_p1 <- spatial_compartment(spe_p1, beta_hat, cellTypeCol = "mm")
+#spa_compa_p1
+# save(spa_compa_p1,
+#      file = here::here("Output", "Data",
+#                        "09_Tessellation", "spa_compa_p1.rds"))
+```
+
+
+
+## Moran's I
+
+Moran's I is a measure of how related the values of a variable are based on the locations they are measured, or the spatial autocorrelation.
+
+In order to compute the Moran's I, we first need to generate a matrix of inverse distance.
+
+```{r}
+spa_dists_p1 <- as.matrix(
+  dist(
+    cbind(centroid_x_p1, centroid_y_p1)
+  )
+)
+
+spa_dists_inv_p1 <- 1/spa_dists_p1
+diag(spa_dists_inv_p1) <- 0
+```
+
+```{r}
+library(rgdal)
+library(tmap)
+library(spdep)
+```
+
+```{r}
+# tmap::tmap_mode("plot")
+# tmaptools::palette_explorer()
+```
+
+
+```{r}
+centroids_p1 <- cbind(centroid_x_p1, centroid_y_p1)
+
+```
+
+
+
+
+### Create spatstat object
+```{r}
+# create ppp object with three marks columns
+ppp_p1 <- ppp(x = centroid_x_p1, y = centroid_y_p1,
+              window = owin(c(0,2048),c(0,2048)),
+              marks = subset(spa_compa_p1, 
+                        select = c(cell_type, Topic_1, tumor_not))
+              )
+```
+
+```{r}
+ppp_p1_tumorNot <- subset(ppp_p1, tumor_not == 0, drop = FALSE)
+ppp_p1_tumor <- subset(ppp_p1, tumor_not == 1, drop = FALSE)
+
+dir_tess_p1 <- dirichlet(ppp_p1_tumorNot)
+plot(dir_tess_p1)
+```
+
+```{r}
+dir_poly_p1 <- as(dir_tess_p1, "SpatialPolygons")
+plot(dir_poly_p1)
+```
+
+```{r}
+## queen's distance
+dir_poly_nb_p1 <- poly2nb(dir_poly_p1)
+dir_poly_net_p1 <- nb2lines(dir_poly_nb_p1, coords = coordinates(dir_poly_p1))
+
+dir_poly_lw1_p1 <- nb2listw(dir_poly_nb_p1, zero.policy = TRUE, style = "W")
+print.listw(dir_poly_lw1_p1, zero.policy = TRUE)
+```
+
+
+```{r}
+## rook's distance
+dir_poly_nb_rook_p1 <- poly2nb(dir_poly_p1, queen = FALSE)
+dir_poly_net_rook_p1 <- nb2lines(dir_poly_nb_rook_p1, coords = coordinates(dir_poly_p1))
+
+dir_poly_lw1_rook_p1 <- nb2listw(dir_poly_nb_rook_p1, zero.policy = TRUE, style = "W")
+print.listw(dir_poly_lw1_rook_p1, zero.policy = TRUE)
+```
+
+
+### global Moran's I
+
+```{r}
+spa_compa_p1$centroid_x <- centroid_x_p1
+spa_compa_p1$centroid_y <- centroid_y_p1
+
+moran.test(spa_compa_p1[spa_compa_p1$tumor_not == 0,]$centroid_x, dir_poly_lw1_p1, zero.policy = TRUE)
+moran.test(spa_compa_p1[spa_compa_p1$tumor_not == 0,]$centroid_y, dir_poly_lw1_p1, zero.policy = TRUE)
+```
+
+
+
+
+
+```{r}
+cut_ppp_p1 <- cut(ppp_p1_tumor, dir_tess_p1, labels = TRUE)
+plot(cut_ppp_p1)
+```
+
+
+```{r}
+split_ppp_p1 <- split(ppp_p1_tumor, dir_tess_p1)
+plot(split_ppp_p1[1:30], use.marks = FALSE)
+plot(split_ppp_p1[31:60], use.marks = FALSE)
+plot(split_ppp_p1[61:90], use.marks = FALSE)
+plot(split_ppp_p1[91:120], use.marks = FALSE)
+```
+
+
+```{r}
+split_spa_point_p1 <- lapply(split_ppp_p1,
+                             as.ppp,
+                             W = owin(c(0,2048),c(0,2048))
+)
+split_spa_point_p1 <- do.call('rbind', split_spa_point_p1)
+```
+
+
+
+
+
+## Tessllation
+
+```{r}
+segmentation_1 <- readImage("/Users/henzhwang/Desktop/TNBC_training/segmentation/segmentationmask_Point1.tif")
+display(1-segmentation_1, method = "raster", all= TRUE)
+```
+
+```{r}
+# subset sample 1
+spe_1 <- spe[, spe$sample_id == "Sample_01"]
+
+# create ppp object
+centroid_x <- spatialCoords(spe_1)[, 1]
+centroid_y <- spatialCoords(spe_1)[, 2]
+ppp_1 <- ppp(centroid_x, centroid_y, window=owin(c(0,2048),c(0,2048)), marks = factor(spe_1$mm))
+```
+
+```{r}
+A <- spatstat.explore::alltypes(ppp_1)
+plot(A)
+```
+
+```{r}
+A <- by(ppp_1, FUN = adaptive.density)
+plot(A)
+```
+
+
+```{r}
+plot(dirichlet(ppp_1))
+#tiles(dirichlet(ppp_1))
+```
+
+```{r}
+#V <- dirichlet(ppp_1)
+#plot(split(ppp_1, V))
+```
+
+
+
+
+
+
+
+

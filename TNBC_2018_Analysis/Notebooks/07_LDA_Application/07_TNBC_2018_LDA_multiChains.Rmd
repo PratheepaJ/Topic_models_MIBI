@@ -471,3 +471,10 @@ ggpubr::ggarrange(
 #       width = 15, height = 12)
 ```
 
+
+
+```{r fig.width=10, fig.height=6}
+# TNBC_2018_LDA_5_2000$plot_topic_prop
+# TNBC_2018_LDA_5_2000$plot_cellType_prop
+```
+

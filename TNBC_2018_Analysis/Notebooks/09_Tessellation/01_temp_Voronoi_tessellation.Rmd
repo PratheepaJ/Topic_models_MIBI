@@ -1,0 +1,106 @@
+---
+title: "Temp Voronoi tessellation"
+author: "Pratheepa Jeganathan"
+date: "2023-02-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r eval=FALSE}
+BiocManager::install("EBImage")
+```
+
+## EBImage
+
+```{r message=FALSE, warning=FALSE}
+library(EBImage)
+
+```
+
+```{r}
+nuc <- readImage("../data/nuclei.tif") 
+
+display(1-nuc, method = "raster", all= TRUE) # 1-nuc to swap black (noise) to white 
+```
+
+```{r}
+dim(nuc)
+imageData(nuc)[1:3, 1:3, 1]
+nuc
+object.size(nuc)
+
+#display(rotate(1-nuc, angle = 30))
+```
+
+```{r eval=FALSE}
+imagefiles = system.file("images", c("image-DAPI.tif", "image-FITC.tif", "image-Cy3.tif"), package = "MSMB")
+cells = readImage(imagefiles)
+```
+
+
+```{r eval=FALSE}
+zeros = Image(dim = dim(nuclei))
+
+voronoiExamp = propagate(
+  seeds = nuclei, 
+  x = zeros, 
+  lambda = 100)
+
+voronoiPaint = paintObjects(
+  voronoiExamp, 
+  1 - nucOpened
+  )
+```
+## spatstat
+
+```{r}
+library(spatstat)
+```
+
+```{r}
+data(lansing)
+# split into sub-patterns and compute adaptive intensity
+A <- by(lansing, FUN = adaptive.density)
+plot(A)
+```
+
+```{r}
+X <- runifpoint(20)
+Y <- runifpoint(10)
+superimpose(X, Y, W = square(2))
+ppp1 <- superimpose(Hooray = X, Boo = Y)
+B <- by(ppp1, FUN = adaptive.density)
+plot(B)
+```
+
+
+```{r}
+X <- runifpoint(42)
+plot(X)
+plot(dirichlet(X))
+
+```
+
+Operations involving a tessellation
+
+```{r}
+X <- runifpoint(10)
+V <- dirichlet(X)
+U <- tiles(V)
+unlist(lapply(U, area.owin))
+```
+
+```{r}
+X <- runifpoint(100) # point pattern 
+plot(X)
+
+Z <- dirichlet(runifpoint(16)) # tess - consider tumor
+
+plot(Z)
+
+plot(cut(X, Z))
+```
+

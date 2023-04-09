@@ -1,0 +1,451 @@
+---
+title: "09_Tessellation_3"
+knit: (function(input, encoding) {
+  rmarkdown::render(input = input,
+                    output_dir = here::here("Output", "HTML"),
+                    knit_root_dir = rprojroot::find_rstudio_root_file())})
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document: 
+    toc: yes
+date: "2023-02-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "../")
+#knitr::opts_knit$set(output.dir = "../Output_Documents/")
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Library
+```{r library, warning=FALSE, message=FALSE}
+library(rstan)
+library(dplyr)
+library(EBImage)
+library(ggplot2)
+library(spatstat)
+library(randomcoloR)
+library(SpatialExperiment)
+```
+
+
+## Dataset
+
+Load the TNBC SPE object.
+```{r dataset, warning=FALSE, message=FALSE}
+load(here::here("Output", "Data", "03_SPE", "03_TNBC_2018_spe.rds"))
+spe
+```
+
+
+## Posterior Sampling
+
+Load posterior sampling results of 5 topics using 4 chains and 2000 iterations on the dataset.
+```{r}
+source(here::here("Notebooks", 
+                  "06_LDA_scripts", "06_LDA_analysis.R"))
+
+TNBC_2018_LDA_5_2000 <- LDA_analysis(
+  spe = spe,
+  SampleID_name = "sample_id",
+  cellType_name = "mm",
+  K = 5,
+  alpha = 0.8,
+  gamma = 0.8,
+  iter = 2000,
+  chain = 4,
+  col_names_theta_all = c("iteration", "Sample", "Topic", "topic.dis"),
+  col_names_beta_hat = c("iterations", "Topic", "Cell.Type", "beta_h"),
+  stan_file_path = here::here("Notebooks", "06_LDA_scripts", "06_lda.stan"),
+  load_file = TRUE,
+  save_file = FALSE,
+  file_default = TRUE,
+  file_fold = "07_LDA_multiChains"
+)
+```
+
+
+## Cell Type Proportion in each Topics
+
+```{r}
+beta_hat <- TNBC_2018_LDA_5_2000$beta_aligned
+dim(beta_hat)
+dimnames(beta_hat)
+```
+
+
+```{r}
+apply(data.frame(beta_hat[, 1, ]), 2, median)
+```
+
+
+```{r}
+cellType_propInPercentage <- function(beta_hat) {
+  
+  K <- dim(beta_hat)[2]
+  cellType_uni <- dim(beta_hat)[3]
+  
+  cellType_prop_df <- (
+    apply(data.frame(beta_hat[, 1, ]), 2, median)
+    |> as.data.frame()
+  )
+  
+  for (i in (2:K)){
+    cellType_prop <- (
+      apply(data.frame(beta_hat[, i, ]), 2, median)
+    |> as.data.frame()
+    )
+    cellType_prop_df <- cbind(cellType_prop_df, cellType_prop)
+  }
+  
+  colnames(cellType_prop_df) <- dimnames(beta_hat)[[2]]
+  rownames(cellType_prop_df) <- NULL
+  cellType_prop_df <- cbind("cell_type" = dimnames(beta_hat)[[3]],
+                            cellType_prop_df)
+  
+  #cellType_prop_df[ , sort(names(cellType_prop_df))]
+  
+  return(cellType_prop_df)
+}
+```
+
+
+```{r}
+#abind::abind(beta_chain[[2]],beta_aligned,along = 1) |> View()
+```
+
+
+```{r}
+cellType_propInPercentage(beta_hat)
+```
+
+
+
+
+## Spatial Compartment Dataframe
+
+We want to construct a spatial compartment dataframe, where the rows are the cell identity. The columns of the dataframe will contain the cell type of the corresponding cell identity along with the proportion of that cell type in each topics for the number of topics $K$.
+
+```{r}
+spatial_compartment <- function(spe, beta_hat, cellTypeCol = "mm") {
+  
+  sample_id <- spe$sample_id
+  
+  #coord_xy <- spatialCoords(spe)
+  
+  cell_ct <- cbind("cell_id" = dimnames(assay(spe))[[2]], 
+                   "cell_type" = spe$mm,
+                   spatialCoords(spe)) |> data.frame()
+  
+  ct_prop <- cellType_propInPercentage(beta_hat)
+  
+  ## 1 for tumor cells, 0 for immune and non-immune cells
+  tumor_not <- factor(ifelse(cell_ct == "Other", 1, 0)[, 2])
+  #print(tumor_not)
+  
+  result <- cbind(sample_id, 
+                  left_join(cell_ct, ct_prop, by = "cell_type"),
+                  tumor_not
+  )
+  
+  result <- dplyr::mutate(result, cell_type = factor(cell_type))
+  
+  return(result)
+}
+```
+
+```{r}
+spa_compa <- spatial_compartment(spe, beta_hat, cellTypeCol = "mm")
+head(spa_compa)
+```
+
+
+
+## Patient 1
+```{r}
+spe_p4 <- spe[ ,spe$sample_id == "Sample_04"]
+centroid_x_p4 <- spatialCoords(spe_p4)[, 1]
+centroid_y_p4 <- spatialCoords(spe_p4)[, 2]
+
+#spa_compa_p4 <- spa_compa[spa_compa$sample_id == "Sample_01",]
+spa_compa_p4 <- spatial_compartment(spe_p4, beta_hat, cellTypeCol = "mm")
+#spa_compa_p4
+# save(spa_compa_p4,
+#      file = here::here("Output", "Data",
+#                        "09_Tessellation", "spa_compa_p4.rds"))
+```
+
+
+### Create spatstat object
+```{r}
+# create ppp object with three marks columns
+ppp_p4 <- ppp(x = centroid_x_p4, y = centroid_y_p4,
+              window = owin(c(0,2048),c(0,2048)),
+              marks = subset(spa_compa_p4, 
+                        select = c(cell_type, Topic_1, tumor_not))
+              )
+```
+
+```{r}
+ppp_p4_tumorNot <- subset(ppp_p4, tumor_not == 0, drop = FALSE)
+ppp_p4_tumor <- subset(ppp_p4, tumor_not == 1, drop = FALSE)
+plot(quadratcount(split(ppp_p4), nx = 12, ny = 12))
+
+dir_tess_p4 <- dirichlet(ppp_p4_tumor)
+plot(dir_tess_p4)
+```
+
+
+```{r}
+library(maptools)
+dir_poly_p4 <- as(dir_tess_p4, "SpatialPolygons")
+plot(dir_poly_p4)
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+cut_ppp_p4 <- cut(ppp_p4_tumorNot, dir_tess_p4, labels = TRUE)
+plot(cut_ppp_p4)
+plot(quadratcount(cut_ppp_p4))
+```
+
+```{r}
+split_ppp_p4 <- split(ppp_p4_tumorNot, dir_tess_p4)
+plot(split_ppp_p4[1:30], use.marks = FALSE)
+plot(split_ppp_p4[31:60], use.marks = FALSE)
+plot(split_ppp_p4[61:90], use.marks = FALSE)
+plot(split_ppp_p4[91:120], use.marks = FALSE)
+```
+
+
+```{r}
+split_spa_point_p4 <- lapply(split_ppp_p4,
+                             as.ppp,
+                             W = owin(c(0,2048),c(0,2048))
+) 
+#split_spa_point_p4 <- do.call('rbind', split_spa_point_p4)
+#split_spa_point_p4[[2]]$window
+split_spa_point_p4 <- sapply(c(1:length(split_spa_point_p4)), function(k){
+  split_spa_point_p4[[k]]$n
+})
+#split_spa_point_p4
+```
+
+```{r}
+dir_poly_p4$numTumor <- split_spa_point_p4
+
+tmap::tm_shape(dir_poly_p4) +
+  tmap::tm_polygons(
+    col = "numTumor",
+    title = "Number of \ntumors cells",
+    style = "jenks",
+    palette = "YlGn",
+    n = 6
+  ) +
+  tmap::tm_layout(legend.outside = TRUE,
+                  legend.outside.position = "right")
+```
+
+
+```{r}
+library(spdep)
+## queen's distance
+dir_poly_nb_p4 <- poly2nb(dir_poly_p4)
+dir_poly_net_p4 <- nb2lines(dir_poly_nb_p4, coords = coordinates(dir_poly_p4))
+
+dir_poly_lw1_p4 <- nb2listw(dir_poly_nb_p4, zero.policy = TRUE, style = "W")
+print.listw(dir_poly_lw1_p4, zero.policy = TRUE)
+```
+
+
+```{r}
+## rook's distance
+dir_poly_nb_rook_p4 <- poly2nb(dir_poly_p4, queen = FALSE)
+dir_poly_net_rook_p4 <- nb2lines(dir_poly_nb_rook_p4, coords = coordinates(dir_poly_p4))
+
+dir_poly_lw1_rook_p4 <- nb2listw(dir_poly_nb_rook_p4, zero.policy = TRUE, style = "W")
+print.listw(dir_poly_lw1_rook_p4, zero.policy = TRUE)
+```
+
+
+
+### global Moran's I
+
+```{r}
+mi_numTumor <- moran.test(dir_poly_p4$numTumor, dir_poly_lw1_p4, zero.policy = TRUE)
+mi_numTumor
+```
+
+
+### local Moran's I
+
+```{r}
+lmi_numTumor_queen <- localmoran(dir_poly_p4$numTumor,
+                                 listw = dir_poly_lw1_p4)
+
+dir_poly_p4$Ii <- lmi_numTumor_queen[, 1]
+dir_poly_p4$E.Ii <- lmi_numTumor_queen[, 2]
+dir_poly_p4$Var.Ii <- lmi_numTumor_queen[, 3]
+dir_poly_p4$Z.Ii <- lmi_numTumor_queen[, 4]
+dir_poly_p4$P <- lmi_numTumor_queen[, 5]
+```
+
+
+```{r}
+map_poly_p4_queen <- tmap::tm_shape(dir_poly_p4) + 
+  tmap::tm_polygons(col = "Z.Ii", 
+              title = "Local Moran's I", 
+              style = "fixed",
+              breaks = c(-Inf, -1.96, 1.96, Inf),
+              labels = c("Negative SAC", "Random SAC", "Positive SAC"),
+              palette = "RdBu", n = 3,
+              midpoint = NA,
+              border.alpha = 0.3) 
+map_poly_p4_queen
+```
+
+
+```{r}
+# rook's distance
+lmi_numTumor_rook <- localmoran(dir_poly_p4$numTumor,
+                                 listw = dir_poly_lw1_rook_p4)
+
+dir_poly_p4$Ii <- lmi_numTumor_rook[, 1]
+dir_poly_p4$E.Ii <- lmi_numTumor_rook[, 2]
+dir_poly_p4$Var.Ii <- lmi_numTumor_rook[, 3]
+dir_poly_p4$Z.Ii <- lmi_numTumor_rook[, 4]
+dir_poly_p4$P <- lmi_numTumor_rook[, 5]
+```
+
+
+```{r}
+map_poly_p4_rook <- tmap::tm_shape(dir_poly_p4) + 
+  tmap::tm_polygons(col = "Z.Ii", 
+              title = "Local Moran's I", 
+              style = "fixed",
+              breaks = c(-Inf, -1.96, 1.96, Inf),
+              labels = c("Negative SAC", "Random SAC", "Positive SAC"),
+              palette = "RdBu", n = 3,
+              midpoint = NA,
+              border.alpha = 0.3) 
+map_poly_p4_rook
+```
+
+
+
+### Poly objects by celltype
+
+```{r}
+ppp_p4_B <- subset(ppp_p4, 
+                   cell_type == "B",
+                   drop = FALSE)
+summary(ppp_p4_B)
+superimpose(ppp_p4, ppp_p4_B)
+```
+
+
+```{r}
+plot(dirichlet(superimpose(ppp_p4, ppp_p4_B)))
+```
+
+
+
+
+
+
+
+
+
+## Subset Topic Marks
+
+```{r}
+ppp_p4_topic <- subset(ppp_p4, select = "Topic_1")
+summary(ppp_p4_topic)
+plot(cut.ppp(ppp_p4_topic, breaks = c(0, 0.007, 0.72, 1)))
+```
+
+
+```{r}
+ppp_p4_topic_tumorNot <- subset.ppp(ppp_p4, cell_type != "Other")
+summary(ppp_p4_topic_tumorNot)
+plot(cut.ppp(subset(ppp_p4_topic_tumorNot, select = Topic_1), breaks = c(0, 0.0045, 0.085, 1)))
+```
+
+```{r}
+ppp_p4_tumorNot_neighbours <- applynbd(subset(ppp_p4_topic_tumorNot, select = cell_type),
+                                       #R = nndist(ppp_p4_topic_tumorNot) |> median(),
+                                       N = 5,
+                                       function(Y, ...) {table(marks(Y))},
+                                       exclude = TRUE)
+View(ppp_p4_tumorNot_neighbours)
+```
+
+
+
+
+
+## K-function
+
+```{r}
+K <- Kest(ppp_p4)
+plot(K, sqrt(./pi) ~ r)
+```
+
+
+```{r}
+K <- Kest(ppp_p4_tumor)
+plot(K, sqrt(./pi) ~ r)
+```
+
+
+```{r}
+K <- Kest(ppp_p4_tumorNot)
+plot(K, sqrt(./pi) ~ r)
+```
+
+```{r}
+plot(Kest.fft(ppp_p4))
+```
+
+
+
+```{r}
+plot(allstats(unmark(ppp_p4)))
+```
+
+
+
+```{r}
+KX <- Kest(ppp_p4_tumor)
+KY <- Kest(ppp_p4_tumorNot)
+Kdiff <- eval.fv(KX - KY) 
+plot(Kdiff)
+```
+
+```{r}
+plot(Kcross(ppp_p4, select = -c(cell_type, Topic_1), 0, 1))
+```
+
+
+```{r}
+plot(alltypes(subset(ppp_p4, select = -c(cell_type, Topic_1)), "K"))
+```
+
+
+
+```{r}
+plot(alltypes(subset(ppp_p4, select = -c(tumor_not, Topic_1)), "K"))
+```
+
