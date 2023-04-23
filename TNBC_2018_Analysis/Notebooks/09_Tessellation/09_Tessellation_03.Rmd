@@ -246,7 +246,7 @@ split_spa_point_p4 <- sapply(c(1:length(split_spa_point_p4)), function(k){
 ```{r}
 dir_poly_p4$numTumor <- split_spa_point_p4
 
-tmap::tm_shape(dir_poly_p4) +
+tessllation_space_12 <- tmap::tm_shape(dir_poly_p4) +
   tmap::tm_polygons(
     col = "numTumor",
     title = "Number of \ntumors cells",
@@ -256,6 +256,10 @@ tmap::tm_shape(dir_poly_p4) +
   ) +
   tmap::tm_layout(legend.outside = TRUE,
                   legend.outside.position = "right")
+
+tessllation_space_12
+# tmap::tmap_save(tm=tessllation_space_12, filename = "tessllation_space_12.eps",
+#                 width = 8, height = 5)
 ```
 
 
@@ -266,7 +270,7 @@ dir_poly_nb_p4 <- poly2nb(dir_poly_p4)
 dir_poly_net_p4 <- nb2lines(dir_poly_nb_p4, coords = coordinates(dir_poly_p4))
 
 dir_poly_lw1_p4 <- nb2listw(dir_poly_nb_p4, zero.policy = TRUE, style = "W")
-print.listw(dir_poly_lw1_p4, zero.policy = TRUE)
+print.listw(dir_poly_lw1_p4, zero.policy = TRUE) 
 ```
 
 
@@ -304,7 +308,7 @@ dir_poly_p4$P <- lmi_numTumor_queen[, 5]
 
 
 ```{r}
-map_poly_p4_queen <- tmap::tm_shape(dir_poly_p4) + 
+map_poly_p12_queen <- tmap::tm_shape(dir_poly_p4) + 
   tmap::tm_polygons(col = "Z.Ii", 
               title = "Local Moran's I", 
               style = "fixed",
@@ -312,8 +316,12 @@ map_poly_p4_queen <- tmap::tm_shape(dir_poly_p4) +
               labels = c("Negative SAC", "Random SAC", "Positive SAC"),
               palette = "RdBu", n = 3,
               midpoint = NA,
-              border.alpha = 0.3) 
-map_poly_p4_queen
+              border.alpha = 1) +
+    tmap::tm_layout(legend.outside = TRUE,
+                  legend.outside.position = "right")
+map_poly_p12_queen
+# tmap::tmap_save(tm=map_poly_p12_queen, filename = "map_poly_p12_queen.eps",
+#                 width = 8, height = 5)
 ```
 
 

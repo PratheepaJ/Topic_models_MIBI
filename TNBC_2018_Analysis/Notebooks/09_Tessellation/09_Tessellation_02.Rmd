@@ -165,7 +165,7 @@ head(spa_compa)
 
 ## Patient 1
 ```{r}
-spe_p4 <- spe[ ,spe$sample_id == "Sample_04"]
+spe_p4 <- spe[ ,spe$sample_id == "Sample_12"]
 centroid_x_p4 <- spatialCoords(spe_p4)[, 1]
 centroid_y_p4 <- spatialCoords(spe_p4)[, 2]
 
@@ -256,6 +256,9 @@ tessllation_space <- tmap::tm_shape(dir_poly_p4) +
                   legend.outside.position = "right")
 
 tessllation_space
+
+# tmap::tmap_save(tm=tessllation_space, filename = "tessllation_space_12.eps",
+#                 width = 8, height = 5)
 ```
 
 
@@ -312,10 +315,13 @@ map_poly_p4_queen <- tmap::tm_shape(dir_poly_p4) +
               labels = c("Negative SAC", "Random SAC", "Positive SAC"),
               palette = "RdBu", n = 3,
               midpoint = NA,
-              border.alpha = 0.3) +
+              border.alpha = 1) +
   tmap::tm_layout(legend.outside = TRUE,
                   legend.outside.position = "right")
 map_poly_p4_queen
+
+# tmap::tmap_save(tm=map_poly_p4_queen, filename = "map_poly_p12_queen.eps",
+#                 width = 8, height = 5)
 ```
 
 

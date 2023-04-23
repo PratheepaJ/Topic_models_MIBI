@@ -127,6 +127,7 @@ plot(aligned_topics_transport_5, add_leaves = TRUE, label_topics = TRUE)
 ```{r}
 aligned_topics_transport_8 <- align_topics(lda_models[1:8], method = "transport")
 plot(aligned_topics_transport_8, add_leaves = TRUE, label_topics = TRUE)
+#ggsave("alto.png", height = 6.5, width = 12)
 ```
 
 
@@ -169,6 +170,9 @@ plot_beta(aligned_topics_product, models = c("k3", "k5", "k7","k12","k16"), thre
 plot_beta(aligned_topics_transport, models = c("k3", "k7","k12","k16"), threshold = 0.005)
 ```
 
+```{r}
+plot_beta(aligned_topics_transport, models = c("k3", "k4", "k5", "k6", "k7"), threshold = 0.005)
+```
 
 
 ```{r}

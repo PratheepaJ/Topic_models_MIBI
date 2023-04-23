@@ -75,9 +75,9 @@ plotCellTypeDistribution <- function(
                                     y = Cell.Type,
                                     fill = beta_median)) +
     ggplot2::geom_tile() +
-    ggplot2::ylab("Cell Type") +
+    ggplot2::ylab("Cell Phenotype") +
     ggplot2::xlab("Topic") +
-    ggplot2::scale_fill_gradientn(name = "Median Cell Type \ndistribution",
+    ggplot2::scale_fill_gradientn(name = "Median Cell \nPhenotype \ndistribution",
                          colors = c("gray98", "dodgerblue")) +
     ggplot2::theme_classic(base_size = 16) +
     ggplot2::theme(plot.title = element_text(hjust = 0.5))

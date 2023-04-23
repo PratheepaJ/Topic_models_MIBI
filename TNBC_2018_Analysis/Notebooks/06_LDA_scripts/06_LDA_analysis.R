@@ -302,6 +302,7 @@ LDA_analysis <- function(
   
   Sample <- Topic <- topic.dis <- NULL
   median.topic.dis <- median <- NULL
+
   
   theta_long <- reshape2::melt(theta_aligned) |> as_tibble()
   colnames(theta_long) = col_names_theta_all
@@ -325,21 +326,22 @@ LDA_analysis <- function(
       median.topic.dis = median(topic.dis)
     ) 
     |> dplyr::ungroup()
+    |> dplyr::mutate(Topic = stringr::str_remove(Topic, "Topic_"))
     |> dplyr::mutate(
       Topic = factor(
         Topic,
-        levels = rev(stringr::str_c("Topic_",1:K)
+        #levels = rev(stringr::str_c("Topic_",1:K)
+        levels = seq(1, K))
         )
       )
-    )
-  )
+  
   
   
   # plot
   p_topic_prop <- ggplot2::ggplot(
     theta_summary,
     ggplot2::aes(
-      x= Sample,
+      x = Sample,
       y = Topic)
   )
   
@@ -348,13 +350,15 @@ LDA_analysis <- function(
     ggplot2::geom_tile(
       ggplot2::aes(fill = median.topic.dis)
     ) +
+    ggplot2::ylab("Community") +
     # ggplot2::facet_grid(
     #   .~Sample,
     #   scale = "free"
     # ) +
     ggplot2::xlab("Sample") +
+    ggplot2::ylab("Community") +
     ggplot2::scale_fill_gradientn(
-      name = "Median Topic \ndistribution",
+      name = "Median Community \ndistribution",
       colors = c("gray98", "#E69F00")
       ) +
     # ggplot2::scale_alpha(
@@ -423,9 +427,9 @@ LDA_analysis <- function(
                                                   y = Cell.Type,
                                                   fill = beta_median)) +
     ggplot2::geom_tile() +
-    ggplot2::ylab("Cell Type") +
-    ggplot2::xlab("Topic") +
-    ggplot2::scale_fill_gradientn(name = "Median Cell Type \ndistribution",
+    ggplot2::ylab("Cell Phenotype") +
+    ggplot2::xlab("Community") +
+    ggplot2::scale_fill_gradientn(name = "Median Cell Phenotype \ndistribution",
                                   colours = c("gray98", "dodgerblue")) +
     ggplot2::theme_classic(base_size = 18) +
     ggplot2::theme(plot.title = element_text(hjust = 0.5))
@@ -604,7 +608,7 @@ LDA_analysis <- function(
       bins = 50) +
     ggplot2::xlab("maximum")+
     
-    ggplot2::facet_wrap(~Var2, nrow = 4) +
+    ggplot2::facet_wrap(~Var2, nrow = 4, scales = "free_x") +
     
     ggplot2::geom_vline(
       data = x_max_cellCount,

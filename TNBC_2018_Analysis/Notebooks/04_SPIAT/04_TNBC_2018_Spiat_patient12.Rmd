@@ -219,7 +219,7 @@ cell_prop_p12 <- (p_cells_12
 We also want to plot the cell proportion as bar plots.
 
 ```{r}
-plot_cell_percentages(cell_proportions = p_cells,
+plot_cell_percentages(cell_proportions = p_cells_12,
                       cells_to_exclude = NULL,
                       cellprop_colname = "Proportion_name")
 ```
@@ -513,13 +513,14 @@ formatted_structure_12 <- define_structure(spe_object = formatted_distance,
                                         feature_colname = "Phenotype",
                                         n_margin_layers = 5)
 
-categories <- unique(formatted_structure$Structure)
+categories <- unique(formatted_structure_12$Structure)
 ```
 
 We now plot and color these structure categories.
 ```{r}
 tis_structure_p12 <- plot_cell_categories(spe_object = formatted_structure_12,
-                     feature_colname = "Structure")
+                     feature_colname = "Structure") + ggplot2::ggtitle("")
+tis_structure_p12
 
 #ggsave("Tissue_structure_patient4.jpeg", path = "/Users/henzhwang/Desktop/",
 #       width = 9, height = 7)

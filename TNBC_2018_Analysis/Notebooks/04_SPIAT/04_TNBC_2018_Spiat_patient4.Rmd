@@ -222,21 +222,21 @@ cell_prop_p4 <- (p_cells_4
 ```
 
 ```{r}
-arrange <- ggpubr::ggarrange(
-   cell_prop_p4, cell_prop_p12,
-   labels = c("A", "B"),
-   widths = 10, heights = 6) +
-  theme(text = element_text(size = 18)) 
-
-ggsave(filename = "Cell_proportion_4_12.eps", plot = arrange, device = "eps",
-       width = 10, height = 5,
-       path = here::here("Output", "Figures"))
+# arrange <- ggpubr::ggarrange(
+#    cell_prop_p4, cell_prop_p12,
+#    labels = c("A", "B"),
+#    widths = 10, heights = 6) +
+#   theme(text = element_text(size = 18)) 
+# 
+# ggsave(filename = "Cell_proportion_4_12.eps", plot = arrange, device = "eps",
+#        width = 10, height = 5,
+#        path = here::here("Output", "Figures"))
 ```
 
 We also want to plot the cell proportion as bar plots.
 
 ```{r}
-plot_cell_percentages(cell_proportions = p_cells,
+plot_cell_percentages(cell_proportions = p_cells_4,
                       cells_to_exclude = NULL,
                       cellprop_colname = "Proportion_name")
 ```
@@ -554,13 +554,14 @@ formatted_structure_4 <- define_structure(spe_object = formatted_distance,
                                         feature_colname = "Phenotype",
                                         n_margin_layers = 5)
 
-categories <- unique(formatted_structure$Structure)
+categories <- unique(formatted_structure_4$Structure)
 ```
 
 We now plot and color these structure categories.
 ```{r}
 tis_structure_p4 <- plot_cell_categories(spe_object = formatted_structure_4,
-                     feature_colname = "Structure")
+                     feature_colname = "Structure") + ggplot2::ggtitle("")
+tis_structure_p4
 
 #ggsave("Tissue_structure_patient4.jpeg", path = "/Users/henzhwang/Desktop/",
 #       width = 9, height = 7)

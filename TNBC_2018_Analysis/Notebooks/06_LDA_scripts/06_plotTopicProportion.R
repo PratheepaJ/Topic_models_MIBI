@@ -39,7 +39,7 @@ plotTopicProportion <- function(
   }
 
 
-  dimnames(theta_aligned)[[2]] <- unique(spe$sample_id)
+  dimnames(theta_aligned)[[2]] <- sort(unique(spe$sample_id))
   dimnames(theta_aligned)[[3]] <- c(paste0("Topic_", seq(1,K)))
 
 
@@ -108,6 +108,7 @@ plotTopicProportion <- function(
     #   .~Sample,
     #   scale = "free"
     # ) +
+    ggplot2::ylab("Topic") + 
     ggplot2::xlab("Sample") +
     ggplot2::scale_fill_gradientn(name = "Median Topic \ndistribution",
                                   colors = c("gray98", "#E69F00")) + 

@@ -309,22 +309,22 @@ p_model_assessment
 
 
 ```{r}
-# ggpubr::ggarrange(
-#   ggpubr::ggarrange(
-#     p_diag_5_2000[[1]], p_diag_5_2000[[2]],
-#     ncol = 2,
-#     labels = c("A", "B")
-#   ),
-#   ggpubr::ggarrange(
-#     p_model_assessment,
-#     labels = c("C")
-#   ),
-#   heights = c(3, 5),
-#   nrow = 2
-# )
-# 
-# ggsave(filename = "diag_assess_plots.eps", device = "eps",
-#        width = 10, height = 6,
+ggpubr::ggarrange(
+  ggpubr::ggarrange(
+    p_diag_5_2000[[1]], p_diag_5_2000[[2]],
+    ncol = 2,
+    labels = c("A", "B")
+  ),
+  # ggpubr::ggarrange(
+  #   p_model_assessment,
+  #   labels = c("C")
+  # ),
+  heights = c(3, 5),
+  nrow = 1
+)
+
+# ggsave(filename = "diag_plots.eps", device = "eps",
+#        width = 10, height = 4,
 #        path = here::here("Output", "Figures"))
 ```
 
@@ -382,6 +382,32 @@ TNBC_2018_LDA_5_2000 <- LDA_analysis(
   file_fold = "07_LDA_multiChains"
 )
 ```
+
+```{r}
+# #p_topicProp <- TNBC_2018_LDA_5_2000$plot_topic_prop
+# #p_cellTypeDist <- TNBC_2018_LDA_5_2000$plot_cellType_prop
+# p <- ggpubr::ggarrange(
+#   p_topicProp, p_cellTypeDist,
+#   labels = "AUTO",
+#   widths = 10, heights = c(4, 5),
+#   nrow = 2
+#   #common.legend = TRUE, lengend = "top"
+# )
+# p
+# 
+# ggsave(filename = "topic_cellType_prop_plots.eps", device = "eps",
+#        width = 14, height = 9,
+#        path = here::here("Output", "Figures"))
+```
+
+
+```{r}
+# TNBC_2018_LDA_5_2000$plot_model_assessment
+# ggsave(filename = "assess_plots.eps", device = "eps",
+#        width = 10, height = 6,
+#        path = here::here("Output", "Figures"))
+```
+
 
 ```{r}
 TNBC_2018_LDA_7_2000 <- LDA_analysis(
